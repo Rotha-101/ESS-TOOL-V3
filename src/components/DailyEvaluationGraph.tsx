@@ -2403,7 +2403,7 @@ export function DailyEvaluationGraph({
 
           const traces = [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 2 } }, 0),
-            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean((evalData?.cmdP?.[pk] || evalData?.cmdP?.[pk])?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
             applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
             applyTrace({ y: evalData.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 2 } }, 3)
           ];
@@ -2426,8 +2426,8 @@ export function DailyEvaluationGraph({
 
 
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean((evalData?.cmdQ?.[pk] || evalData?.cmdQ?.[pk])?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4)
+            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'v_q_' + pk);
           createPlotWithEvents(div, traces, layout, 'v_q_' + pk);
@@ -2465,8 +2465,8 @@ export function DailyEvaluationGraph({
         containerDiv.appendChild(div2);
         createPlotWithEvents(div2, [
           applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-          applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-          applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+          applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+          applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
           applyTrace({ y: evalData.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
         ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, activeMetric + '_soc_' + pk), activeMetric + '_soc_' + pk);
 
@@ -2483,8 +2483,8 @@ export function DailyEvaluationGraph({
 
 
           applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-          applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-          applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+          applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+          applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
         ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], activeMetric + '_vq_' + pk), activeMetric + '_vq_' + pk);
       } else if (activeMetric === 'fig4') {
         plants.forEach(pk => {
@@ -2517,8 +2517,8 @@ export function DailyEvaluationGraph({
           containerDiv.appendChild(div2);
           createPlotWithEvents(div2, [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
             applyTrace({ y: evalData.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
           ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'fig4_soc_' + pk), 'fig4_soc_' + pk);
 
@@ -2535,8 +2535,8 @@ export function DailyEvaluationGraph({
 
 
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
           ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'fig4_vq_' + pk), 'fig4_vq_' + pk);
         });
       } else if (activeMetric === 'fig5') {
@@ -2578,9 +2578,9 @@ export function DailyEvaluationGraph({
           const socStats = evalDataRaw.socStats[pk];
           const traces = [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
-            applyTrace({ y: evalDataRaw.dispatchP[pk], type: 'scattergl', mode: 'lines', name: 'P dispatch allocation', showlegend: Boolean(evalDataRaw.dispatchP[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#339933', width: 1.8, dash: 'dash' } }, 3),
+            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalDataRaw.dispatchP[pk], type: 'scattergl', mode: 'lines', name: 'P dispatch allocation', showlegend: Boolean(evalDataRaw.dispatchP[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#339933', width: 1.8, dash: 'dash' } }, 3),
             applyTrace({ y: evalData.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 4)
           ];
 
@@ -2663,8 +2663,8 @@ export function DailyEvaluationGraph({
 
 
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean((evalDataRaw?.cmdQ?.[pk] || evalDataRaw?.cmdQ?.[pk])?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'fig6_' + pk);
           createPlotWithEvents(div, traces, layout, 'fig6_' + pk);
@@ -3910,8 +3910,8 @@ export function DailyEvaluationGraph({
 
           const traces = [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 2 } }, 0),
-            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
             applyTrace({ y: evalData.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 2 } }, 3)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'soc_p_' + pk);
@@ -3933,8 +3933,8 @@ export function DailyEvaluationGraph({
 
 
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4)
+            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'v_q_' + pk);
           createPlotWithEvents(div, traces, layout, 'v_q_' + pk);
@@ -3972,8 +3972,8 @@ export function DailyEvaluationGraph({
         containerDiv.appendChild(div2);
         createPlotWithEvents(div2, [
           applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-          applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-          applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+          applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+          applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
           applyTrace({ y: evalData.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
         ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, activeMetric + '_soc_' + pk), activeMetric + '_soc_' + pk);
 
@@ -3990,8 +3990,8 @@ export function DailyEvaluationGraph({
 
 
           applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-          applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-          applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+          applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+          applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
         ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], activeMetric + '_vq_' + pk), activeMetric + '_vq_' + pk);
       } else if (activeMetric === 'fig4') {
         plants.forEach(pk => {
@@ -4024,8 +4024,8 @@ export function DailyEvaluationGraph({
           containerDiv.appendChild(div2);
           createPlotWithEvents(div2, [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
             applyTrace({ y: evalData.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
           ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'fig4_soc_' + pk), 'fig4_soc_' + pk);
 
@@ -4042,8 +4042,8 @@ export function DailyEvaluationGraph({
 
 
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
           ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'fig4_vq_' + pk), 'fig4_vq_' + pk);
         });
       } else if (activeMetric === 'fig5') {
@@ -4085,9 +4085,9 @@ export function DailyEvaluationGraph({
           const socStats = evalDataRaw.socStats[pk];
           const traces = [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
-            applyTrace({ y: evalDataRaw.dispatchP[pk], type: 'scattergl', mode: 'lines', name: 'P dispatch allocation', showlegend: Boolean(evalDataRaw.dispatchP[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#339933', width: 1.8, dash: 'dash' } }, 3),
+            applyTrace({ y: evalData.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalDataRaw.dispatchP[pk], type: 'scattergl', mode: 'lines', name: 'P dispatch allocation', showlegend: Boolean(evalDataRaw.dispatchP[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#339933', width: 1.8, dash: 'dash' } }, 3),
             applyTrace({ y: evalData.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 4)
           ];
 
@@ -4170,8 +4170,8 @@ export function DailyEvaluationGraph({
 
 
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean((evalDataRaw?.cmdQ?.[pk] || evalDataRaw?.cmdQ?.[pk])?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+            applyTrace({ x: filteredTimeX, y: (evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+            applyTrace({ y: evalData.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'fig6_' + pk);
           createPlotWithEvents(div, traces, layout, 'fig6_' + pk);
@@ -4621,9 +4621,9 @@ export function DailyEvaluationGraph({
           <Plot
             data={[
               applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v)) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',             line: { color: '#0072BD', width: 2 } }, 0),
-              applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#EDB120', width: 2 } }, 10),
-              applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#77AC30', width: 2 } }, 11),
-              applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean((evalData?.cmdP?.[pk] || evalData?.cmdP?.[pk])?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)),   line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 3),
+              applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#EDB120', width: 2 } }, 10),
+              applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#77AC30', width: 2 } }, 11),
+              applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true,   line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 3),
               applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power',  line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 4),
               applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',     line: { color: '#D95319', width: 2 } }, 5),
             ]}
@@ -4658,8 +4658,8 @@ export function DailyEvaluationGraph({
 
 
               applyTrace({ x: filteredTimeX, y: evalData.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total',            yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-              applyTrace({ x: filteredTimeX, y: (evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-              applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4),
+              applyTrace({ x: filteredTimeX, y: (evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+              applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4),
             ]}
             layout={getMATLABLayout(title, 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], `v_q_${pk}`)}
             useResizeHandler={true} style={{ width: '100%', height: '100%' }} config={plotCfgZoom} onClick={undefined} onHover={(e) => handleHover(e, `v_q_${pk}`)} onUnhover={handleUnhover} onRelayout={(e) => handleRelayout(e, `v_q_${pk}`)} onClickAnnotation={(e) => handleClickAnnotation(e, `v_q_${pk}`)}
@@ -4697,10 +4697,10 @@ export function DailyEvaluationGraph({
             <Plot
               data={[
                 applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v)) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',            line: { color: '#0072BD', width: 1.2 } }, 0),
-                applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#EDB120', width: 2 } }, 10),
-                applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#77AC30', width: 2 } }, 11),
-                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+                applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#EDB120', width: 2 } }, 10),
+                applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#77AC30', width: 2 } }, 11),
+                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
                 applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',   line: { color: '#D95319', width: 1.2 } }, 3),
               ]}
               layout={{...getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, `pf_${pk}_soc`), annotations: getCycleAnnotations(pk as any)}}
@@ -4716,8 +4716,8 @@ export function DailyEvaluationGraph({
 
 
                 applyTrace({ x: filteredTimeX, y: evalData.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total',            yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-                applyTrace({ x: filteredTimeX, y: (evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-                applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4),
+                applyTrace({ x: filteredTimeX, y: (evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+                applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4),
               ]}
               layout={getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], `pf_${pk}_vq`)}
               useResizeHandler={true} style={{ width: '100%', height: '100%' }} config={plotCfgZoom} onClick={undefined} onHover={(e) => handleHover(e, `pf_${pk}_vq`)} onUnhover={handleUnhover} onRelayout={(e) => handleRelayout(e, `pf_${pk}_vq`)} onClickAnnotation={(e) => handleClickAnnotation(e, `pf_${pk}_vq`)}
@@ -4760,10 +4760,10 @@ export function DailyEvaluationGraph({
             <Plot
               data={[
                 applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v)) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',            line: { color: '#0072BD', width: 1.2 } }, 0),
-                applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#EDB120', width: 2 } }, 10),
-                applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#77AC30', width: 2 } }, 11),
-                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+                applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#EDB120', width: 2 } }, 10),
+                applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#77AC30', width: 2 } }, 11),
+                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: true, line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) )), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
                 applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',   line: { color: '#D95319', width: 1.2 } }, 3),
               ]}
               layout={{...getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, `fig4_soc_${pk}`), annotations: getCycleAnnotations(pk as any)}}
@@ -4779,8 +4779,8 @@ export function DailyEvaluationGraph({
 
 
                 applyTrace({ x: filteredTimeX, y: evalData.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total',            yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-                applyTrace({ x: filteredTimeX, y: (evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-                applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4),
+                applyTrace({ x: filteredTimeX, y: (evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+                applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4),
               ]}
               layout={getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], `fig4_vq_${pk}`)}
               useResizeHandler={true} style={{ width: '100%', height: '100%' }} config={plotCfgZoom} onClick={undefined} onHover={(e) => handleHover(e, `fig4_vq_${pk}`)} onUnhover={handleUnhover} onRelayout={(e) => handleRelayout(e, `fig4_vq_${pk}`)} onClickAnnotation={(e) => handleClickAnnotation(e, `fig4_vq_${pk}`)}
@@ -4824,7 +4824,7 @@ export function DailyEvaluationGraph({
             y: evalData.cmdP[pKey],
             type: 'scattergl',
             mode: 'lines',
-            name: 'P command from NCC', showlegend: Boolean((evalData?.cmdP?.[pKey] || evalData?.cmdP?.[pKey])?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)),
+            name: 'P command from NCC', showlegend: true,
             line: { color: '#D95319', width: 1.6, shape: 'hv' }
           },
           {
@@ -4841,7 +4841,7 @@ export function DailyEvaluationGraph({
             type: 'scattergl',
             mode: 'lines',
             name: 'P dispatch allocation',
-            showlegend: Boolean(evalData.dispatchP[pKey]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)),
+            showlegend: Boolean(evalData.dispatchP[pKey]?.some((v) => v != null && !isNaN(Number(v)) )),
             line: { color: '#339933', width: 1.8, dash: 'dash' }
           },
           {
@@ -5016,8 +5016,8 @@ export function DailyEvaluationGraph({
 
 
               applyTrace({ x: filteredTimeX, y: evalData.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total',            yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-              applyTrace({ x: filteredTimeX, y: (evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
-              applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean((evalData?.cmdQ?.[pk] || evalData?.cmdQ?.[pk])?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.1)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4),
+              applyTrace({ x: filteredTimeX, y: (evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean(evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) ) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
+              applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: true, yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4),
             ]}
             layout={getMATLABLayout(title, 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], `fig6_${pk}`)}
             useResizeHandler={true} style={{ width: '100%', height: '100%' }} config={plotCfgZoom} onClick={undefined} onHover={(e) => handleHover(e, `fig6_${pk}`)} onUnhover={handleUnhover} onRelayout={(e) => handleRelayout(e, `fig6_${pk}`)} onClickAnnotation={(e) => handleClickAnnotation(e, `fig6_${pk}`)}

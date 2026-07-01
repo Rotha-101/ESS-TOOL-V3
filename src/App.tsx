@@ -274,36 +274,12 @@ export default function App() {
       setProgress({ pct: 0, active: false, label: '' });
     }
   };
+
   const handleDownload = async () => {
     if (exportFormat === 'zip') {
       try {
         const zipEntries: {name: string, data: Uint8Array}[] = [];
 
-        // 1. Gather Validation File Debug Data â€” parallel batch reads (8 at a time)
-        const plants = hcCurrentPlants();
-        // Flatten all items for progress tracking
-        const allItems: {plant: any, cat: any, item: any}[] = [];
-        for (const plant of plants)
-          for (const cat of HC_CATS)
-            for (const item of (plant.files[cat.key] || []))
-              allItems.push({ plant, cat, item });
-
-        const BATCH = 8;
-        for (let i = 0; i < allItems.length; i += BATCH) {
-          const batch = allItems.slice(i, Math.min(i + BATCH, allItems.length));
-          setProgress({ pct: (i / Math.max(allItems.length, 1)) * 60, active: true,
-            label: `Collecting file ${i + 1} of ${allItems.length}...` });
-          const batchResults = await Promise.all(
-            batch.map(async ({ plant, cat, item }) => ({
-              name: `Data/${plant.name}/${cat.key}/${item.file.name}`,
-              data: new Uint8Array(await item.file.arrayBuffer())
-            }))
-          );
-          zipEntries.push(...batchResults);
-          await new Promise(r => setTimeout(r, 0));
-        }
-        
-        // 2. Render and capture Daily Evaluation Graphs
         const getEvalData = () => new Promise((resolve) => {
           const cachedData = useAppStore.getState().evalDataCache[project];
           if (cachedData) return resolve(cachedData);
@@ -329,9 +305,9 @@ export default function App() {
 
         const cachedData = useAppStore.getState().evalDataCache[project];
         if (!cachedData) {
-          setProgress({ pct: 10, active: true, label: 'Loading dataset from local storage...' });
+          setProgress({ pct: 5, active: true, label: 'Loading dataset from local storage...' });
         } else {
-          setProgress({ pct: 10, active: true, label: 'Loading dataset from memory cache (Fast)...' });
+          setProgress({ pct: 5, active: true, label: 'Loading dataset from memory cache (Fast)...' });
         }
         const evalData: any = await getEvalData();
         
@@ -344,7 +320,64 @@ export default function App() {
           });
           return;
         }
+
+        const baseDate = evalData.dataDate ? evalData.dataDate.replace(/-/g, '') : 'UnknownDate';
+        const rootFolder = `Data on ${baseDate}`;
+        const dataValFolder = `${rootFolder}/Data Validation ${baseDate}`;
+        const cycleFolder = `${rootFolder}/cycle ${baseDate}`;
+        const matlabFolder = `${rootFolder}/Matlab code and fig file ${baseDate}`;
+        const graphsFolder = `${rootFolder}/Html and PNG graph ${baseDate}`;
+
+        // Ensure directories exist in the ZIP even if they end up being empty
+        zipEntries.push({ name: `${rootFolder}/`, data: new Uint8Array(0) });
+        zipEntries.push({ name: `${dataValFolder}/`, data: new Uint8Array(0) });
+        zipEntries.push({ name: `${cycleFolder}/`, data: new Uint8Array(0) });
+        zipEntries.push({ name: `${matlabFolder}/`, data: new Uint8Array(0) });
+        zipEntries.push({ name: `${graphsFolder}/`, data: new Uint8Array(0) });
+
+        // 1. Gather Validation File Debug Data
+        const plants = hcCurrentPlants();
+        const allItems: {plant: any, cat: any, item: any}[] = [];
+        for (const plant of plants)
+          for (const cat of HC_CATS)
+            for (const item of (plant.files[cat.key] || []))
+              allItems.push({ plant, cat, item });
+
+        const BATCH = 8;
+        for (let i = 0; i < allItems.length; i += BATCH) {
+          const batch = allItems.slice(i, Math.min(i + BATCH, allItems.length));
+          setProgress({ pct: 10 + (i / Math.max(allItems.length, 1)) * 20, active: true,
+            label: `Collecting validation file ${i + 1} of ${allItems.length}...` });
+          const batchResults = await Promise.all(
+            batch.map(async ({ plant, cat, item }) => ({
+              name: `${dataValFolder}/${plant.name}/${cat.key}/${item.file.name}`,
+              data: new Uint8Array(await item.file.arrayBuffer())
+            }))
+          );
+          zipEntries.push(...batchResults);
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        // 2. Add Cycle Summary
+        setProgress({ pct: 35, active: true, label: 'Generating Cycle Summary...' });
+        let cycleCsv = "Plant,Daily Cycle,Total Cycle\n";
+        const hasPlant2 = !!evalData.dailyCycle?.plant2;
+        const hasPlant3 = !!evalData.dailyCycle?.plant3;
+        cycleCsv += `Plant 1,${evalData.dailyCycle?.plant1 || 0},${evalData.totalCycle?.plant1 || 0}\n`;
+        if (hasPlant2) cycleCsv += `Plant 2,${evalData.dailyCycle?.plant2 || 0},${evalData.totalCycle?.plant2 || 0}\n`;
+        if (hasPlant3) cycleCsv += `Plant 3,${evalData.dailyCycle?.plant3 || 0},${evalData.totalCycle?.plant3 || 0}\n`;
         
+        zipEntries.push({
+          name: `${cycleFolder}/Cycle_Summary_${baseDate}.csv`,
+          data: new TextEncoder().encode(cycleCsv)
+        });
+
+        // 3. Generate MATLAB Bundle
+        setProgress({ pct: 40, active: true, label: 'Preparing MATLAB script export...' });
+        const { exportMatlabScriptsToZip } = await import('./lib/exportMatlab');
+        await exportMatlabScriptsToZip(project, evalData, zipEntries, setProgress, matlabFolder);
+
+        // 4. Render and capture Daily Evaluation Graphs
         if (evalData && evalData.timestamps) {
           setProgress({ pct: 60, active: true, label: `Generating Enterprise Portable View...` });
           
@@ -360,16 +393,15 @@ export default function App() {
           const htmlContent = generatePortableViewHtml(project, evalData, cfg, 'f_p', 'plant1', []);
           const encoder = new TextEncoder();
           const u8 = encoder.encode(htmlContent);
-          zipEntries.push({ name: `Enterprise_Portable_View.html`, data: u8 });
+          zipEntries.push({ name: `${graphsFolder}/Enterprise_Portable_View_${baseDate}.html`, data: u8 });
           await new Promise(r => setTimeout(r, 0));
           
-          await exportAllGraphsToZip(project, evalData, zipEntries, setProgress);
+          await exportAllGraphsToZip(project, evalData, zipEntries, setProgress, graphsFolder);
         }
 
         setProgress({ pct: 90, active: true, label: `Building ZIP archive (${zipEntries.length} files)...` });
         await new Promise(r => setTimeout(r, 0));
-        const prefix = exportFilename || exportSource.replace(/\s+/g, '_');
-        const filename = `${prefix}_with_Graphs_${Date.now()}.zip`;
+        const filename = `${rootFolder}.zip`;
         const bytes = hcBuildZip(zipEntries);
         // Free entry data after building to release memory
         for (const e of zipEntries) (e as any).data = null;

@@ -4,7 +4,8 @@ export const exportAllGraphsToZip = async (
   project: string,
   evalData: any,
   zipEntries: { name: string; data: Uint8Array }[],
-  setProgress: (prog: any) => void
+  setProgress: (prog: any) => void,
+  baseFolder?: string
 ) => {
   if (!evalData || !evalData.timestamps) return;
 
@@ -502,15 +503,16 @@ export const exportAllGraphsToZip = async (
     const prefix = `${i + 1}. ${dateStr}_${projLabel}_`;
     
     const htmlStr = generatePortableViewHtml(project, evalData, graphConfig, g.metricId, selectedPlant, []);
+    const folderPrefix = baseFolder ? `${baseFolder}/` : 'Graphs/';
     zipEntries.push({
-      name: `Graphs/${g.folder}/Interactive/${prefix}${safeName}.html`,
+      name: `${folderPrefix}${g.folder}/Interactive/${prefix}${safeName}.html`,
       data: new TextEncoder().encode(htmlStr)
     });
 
     const pngData = await renderGraphToPng(g.traces, g.layout, offscreenDiv, g.composite);
     if (pngData) {
       zipEntries.push({
-        name: `Graphs/${g.folder}/Images/${prefix}${safeName}.png`,
+        name: `${folderPrefix}${g.folder}/Images/${prefix}${safeName}.png`,
         data: pngData
       });
     }
