@@ -26,3 +26,5 @@ Test/
 
 Data/
 
+Release/
+*.cjs

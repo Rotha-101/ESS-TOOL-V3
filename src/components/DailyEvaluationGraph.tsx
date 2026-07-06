@@ -82,6 +82,7 @@ export function DailyEvaluationGraph({
   const [calcStatus, setCalcStatus] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showCustomization, setShowCustomization] = useState(false);
+  const [showNccPCommand, setShowNccPCommand] = useState(false);
 
   // Full MATLAB-style per-figure graph configuration
   const defaultGraphConfig = {
@@ -1057,7 +1058,18 @@ export function DailyEvaluationGraph({
         return isNaN(n) ? NaN : n;
       };
 
-      const newData = { ...evalData };
+      const newData = {
+        ...evalData,
+        cmdP: { ...evalData.cmdP },
+        cmdQ: { ...evalData.cmdQ },
+        soc: { ...evalData.soc }
+      };
+
+      for (const p of ['plant1', 'plant2', 'plant3'] as const) {
+        if (newData.cmdP[p]) newData.cmdP[p] = [...newData.cmdP[p]];
+        if (newData.cmdQ[p]) newData.cmdQ[p] = [...newData.cmdQ[p]];
+        if (newData.soc[p]) newData.soc[p] = [...newData.soc[p]];
+      }
 
       for (const row of aoa.slice(headerRowIdx + 1)) {
         if (!row || row.length === 0) continue;
@@ -2149,7 +2161,7 @@ export function DailyEvaluationGraph({
           ...trace,
           x: filteredTimeX,
           y: filterArr(trace.y),
-          visible: visible ? true : 'legendonly',
+          visible: visible ? (trace.visible !== undefined ? trace.visible : true) : 'legendonly',
           showlegend: hideLegend ? false : (trace.showlegend !== undefined ? trace.showlegend : true),
           mode: modeBase,
           line: {
@@ -3658,7 +3670,7 @@ export function DailyEvaluationGraph({
           ...trace,
           x: filteredTimeX,
           y: filterArr(trace.y),
-          visible: visible ? true : 'legendonly',
+          visible: visible ? (trace.visible !== undefined ? trace.visible : true) : 'legendonly',
           showlegend: hideLegend ? false : (trace.showlegend !== undefined ? trace.showlegend : true),
           mode: modeBase,
           line: {
@@ -4440,7 +4452,7 @@ export function DailyEvaluationGraph({
         ...trace,
         x: filteredTimeX,
         y: filterArr(trace.y),
-        visible: visible ? true : 'legendonly',
+        visible: visible ? (trace.visible !== undefined ? trace.visible : true) : 'legendonly',
         showlegend: hideLegend ? false : (trace.showlegend !== undefined ? trace.showlegend : true),
         mode: modeBase as any,
         line: {
@@ -4634,8 +4646,8 @@ export function DailyEvaluationGraph({
               applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v) && Math.abs(Number(v)) > 0.001) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',             line: { color: '#0072BD', width: 2 } }, 0),
               applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#EDB120', width: 2 } }, 10),
               applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#77AC30', width: 2 } }, 11),
-              applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)),   line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 3),
-              applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power',  line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 4),
+              applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)),   line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 3),
+              applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 4),
               applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',     line: { color: '#D95319', width: 2 } }, 5),
             ]}
             layout={getMATLABLayout(title, 'P (MW)', 'SOC (%)', undefined, undefined, `soc_p_${pk}`)}
@@ -4706,8 +4718,8 @@ export function DailyEvaluationGraph({
                 applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v) && Math.abs(Number(v)) > 0.001) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',            line: { color: '#0072BD', width: 1.2 } }, 0),
                 applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#EDB120', width: 2 } }, 10),
                 applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#77AC30', width: 2 } }, 11),
-                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
                 applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',   line: { color: '#D95319', width: 1.2 } }, 3),
               ]}
               layout={{...getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, `pf_${pk}_soc`), annotations: getCycleAnnotations(pk as any)}}
@@ -4765,8 +4777,8 @@ export function DailyEvaluationGraph({
                 applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v) && Math.abs(Number(v)) > 0.001) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',            line: { color: '#0072BD', width: 1.2 } }, 0),
                 applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#EDB120', width: 2 } }, 10),
                 applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#77AC30', width: 2 } }, 11),
-                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
                 applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',   line: { color: '#D95319', width: 1.2 } }, 3),
               ]}
               layout={{...getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, `fig4_soc_${pk}`), annotations: getCycleAnnotations(pk as any)}}
@@ -5213,6 +5225,16 @@ export function DailyEvaluationGraph({
               <Upload size={12} />
               NCC Data
             </Button>
+            {(project === 'SNTL400' || project === 'SNTL600') && (
+              <Button
+                onClick={() => setShowNccPCommand(prev => !prev)}
+                className={cn("h-7 text-[9px] font-bold flex items-center gap-1.5 border-0 shadow-sm transition-colors", showNccPCommand ? "bg-amber-600 hover:bg-amber-500 text-white" : "bg-purple-800 hover:bg-purple-700 text-white")}
+                title="Toggle between P Remote Active Power and P Command (NCC)"
+              >
+                <Sliders size={12} />
+                {showNccPCommand ? "Mode: P Command (NCC)" : "Mode: P Remote Active"}
+              </Button>
+            )}
             
           </div>
         </div>
