@@ -46,6 +46,9 @@ interface AppState {
   exportPreviewMode: string;
   setExportPreviewMode: (mode: string) => void;
   
+  showNccPCommand: boolean;
+  setShowNccPCommand: (val: boolean) => void;
+  
   evalDataPreview: any;
   setEvalDataPreview: (data: any) => void;
 
@@ -149,6 +152,9 @@ export const useAppStore = create<AppState>()(
       
       exportPreviewMode: 'data',
       setExportPreviewMode: (mode) => set({ exportPreviewMode: mode }),
+      
+      showNccPCommand: false,
+      setShowNccPCommand: (val) => set({ showNccPCommand: val }),
       
       evalDataPreview: null,
       setEvalDataPreview: (data) => set({ evalDataPreview: data }),

@@ -369,6 +369,8 @@ self.onmessage = async (event) => {
 
       let parsedTotals = { plant1: NaN, plant2: NaN, plant3: NaN };
       let parsedDaily = { plant1: NaN, plant2: NaN, plant3: NaN };
+      let parsedAvgTotal = NaN;
+      let parsedAvgDaily = NaN;
       if (essFiles.length > 0) {
         try {
           const allParsedRows: any[] = [];
@@ -406,6 +408,18 @@ self.onmessage = async (event) => {
             if (p1Blocks.length > 0) parsedTotals.plant1 = p1Blocks[0].AverageCycleOfSPPC || NaN;
             if (p2Blocks.length > 0) parsedTotals.plant2 = p2Blocks[0].AverageCycleOfSPPC || NaN;
             if (p3Blocks.length > 0) parsedTotals.plant3 = p3Blocks[0].AverageCycleOfSPPC || NaN;
+            
+            const isBessProject = project.includes('BESS') || project === 'SNTB30MWH';
+            let allValid = [...p1Blocks.filter(b => b.LastEquivalentNumberOfCycle !== null && !isNaN(b.LastEquivalentNumberOfCycle))];
+            if (!isBessProject) {
+              allValid = [...allValid, ...p2Blocks.filter(b => b.LastEquivalentNumberOfCycle !== null && !isNaN(b.LastEquivalentNumberOfCycle))];
+            }
+            if (project !== 'SNTL400' && project !== 'SNTB30MWH') {
+              allValid = [...allValid, ...p3Blocks.filter(b => b.LastEquivalentNumberOfCycle !== null && !isNaN(b.LastEquivalentNumberOfCycle))];
+            }
+            if (allValid.length > 0) {
+              parsedAvgTotal = allValid.reduce((s, b) => s + b.LastEquivalentNumberOfCycle, 0) / allValid.length;
+            }
   
             const getDailyDiff = (rows: any[]) => {
               const byBlock: Record<number, Record<number, any>> = {};
@@ -427,12 +441,23 @@ self.onmessage = async (event) => {
                   if (!isNaN(b.last) && !isNaN(b.first)) essDiffs.push(b.last - b.first);
                 });
               }
-              return essDiffs.length > 0 ? essDiffs.reduce((a, b) => a + b, 0) / essDiffs.length : NaN;
+              return essDiffs;
             };
   
-            parsedDaily.plant1 = getDailyDiff(p1Rows);
-            parsedDaily.plant2 = getDailyDiff(p2Rows);
-            parsedDaily.plant3 = getDailyDiff(p3Rows);
+            const diffsP1 = getDailyDiff(p1Rows);
+            const diffsP2 = getDailyDiff(p2Rows);
+            const diffsP3 = getDailyDiff(p3Rows);
+
+            parsedDaily.plant1 = diffsP1.length > 0 ? diffsP1.reduce((a, b) => a + b, 0) / diffsP1.length : NaN;
+            parsedDaily.plant2 = diffsP2.length > 0 ? diffsP2.reduce((a, b) => a + b, 0) / diffsP2.length : NaN;
+            parsedDaily.plant3 = diffsP3.length > 0 ? diffsP3.reduce((a, b) => a + b, 0) / diffsP3.length : NaN;
+            
+            let allDiffs = [...diffsP1];
+            if (!isBessProject) allDiffs = [...allDiffs, ...diffsP2];
+            if (project !== 'SNTL400' && project !== 'SNTB30MWH') allDiffs = [...allDiffs, ...diffsP3];
+            if (allDiffs.length > 0) {
+              parsedAvgDaily = allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length;
+            }
           }
         } catch (e) {
           console.error("Error parsing ESS daily cycles:", e);
@@ -445,11 +470,33 @@ self.onmessage = async (event) => {
         plant3: !isNaN(parsedDaily.plant3) ? parsedDaily.plant3 : (isNaN(cycleP3) ? 0.879 : cycleP3),
       };
 
+      if (!isNaN(parsedAvgDaily)) {
+        parsedData.avgDailyCycle = parsedAvgDaily;
+      } else {
+        const d1 = parsedData.dailyCycle.plant1;
+        const d2 = parsedData.dailyCycle.plant2;
+        const d3 = parsedData.dailyCycle.plant3;
+        const hasP2 = project !== 'SNTB30MWH';
+        const hasP3 = project !== 'SNTL400' && project !== 'SNTB30MWH';
+        parsedData.avgDailyCycle = (d1 + (hasP2 ? d2 : 0) + (hasP3 ? d3 : 0)) / (hasP3 ? 3 : (hasP2 ? 2 : 1));
+      }
+
       parsedData.totalCycle = {
         plant1: isNaN(parsedTotals.plant1) ? 170.546875 : parsedTotals.plant1,
         plant2: isNaN(parsedTotals.plant2) ? 171.875000 : parsedTotals.plant2,
         plant3: isNaN(parsedTotals.plant3) ? 171.666667 : parsedTotals.plant3,
       };
+
+      if (!isNaN(parsedAvgTotal)) {
+        parsedData.avgTotalCycle = parsedAvgTotal;
+      } else {
+        const t1 = parsedData.totalCycle.plant1;
+        const t2 = parsedData.totalCycle.plant2;
+        const t3 = parsedData.totalCycle.plant3;
+        const hasP2 = project !== 'SNTB30MWH';
+        const hasP3 = project !== 'SNTL400' && project !== 'SNTB30MWH';
+        parsedData.avgTotalCycle = (t1 + (hasP2 ? t2 : 0) + (hasP3 ? t3 : 0)) / (hasP3 ? 3 : (hasP2 ? 2 : 1));
+      }
 
       const getSocStats = (socArr: number[]) => {
         let maxSoc = -Infinity;

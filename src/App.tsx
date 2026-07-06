@@ -188,10 +188,13 @@ export default function App() {
 
       if (!(window as any).electronAPI) {
         if (window.confirm("Generating .fig files requires the Desktop App (.exe).\n\nHowever, you can download a ZIP containing the raw MATLAB scripts (.m) and JSON data to run on your own MATLAB instance.\n\nWould you like to download the script bundle instead?")) {
-          const evalDataFromDB: any = await getEvalData();
+          let evalDataFromDB: any = await getEvalData();
           if (!evalDataFromDB || !evalDataFromDB.timestamps) {
             alert("No evaluation data found. Please load data in Daily Evaluation Graph first.");
             return;
+          }
+          if ((project === 'SNTL400' || project === 'SNTL600') && useAppStore.getState().showNccPCommand) {
+            evalDataFromDB = { ...evalDataFromDB, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
           }
           setProgress({ pct: 20, active: true, label: 'Preparing MATLAB script export...' });
           const { exportMatlabScriptsToZip } = await import('./lib/exportMatlab');
@@ -225,7 +228,7 @@ export default function App() {
       } else {
         setProgress({ pct: 10, active: true, label: 'Loading dataset from memory cache (Fast)...' });
       }
-      const evalData: any = await getEvalData();
+      let evalData: any = await getEvalData();
       if (!evalData || !evalData.timestamps) {
         setProgress({ pct: 0, active: false, label: '' });
         setAlertData({
@@ -235,6 +238,10 @@ export default function App() {
         });
         return;
       }
+      if ((project === 'SNTL400' || project === 'SNTL600') && useAppStore.getState().showNccPCommand) {
+        evalData = { ...evalData, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+      }
+
 
       setProgress({ pct: 20, active: true, label: 'Preparing MATLAB export...' });
       const { generateAllMatlabScripts } = await import('./lib/exportMatlab');

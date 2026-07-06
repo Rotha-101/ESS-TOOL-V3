@@ -82,7 +82,10 @@ export function DailyEvaluationGraph({
   const [calcStatus, setCalcStatus] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showCustomization, setShowCustomization] = useState(false);
-  const [showNccPCommand, setShowNccPCommand] = useState(false);
+  const showNccPCommand = useAppStore(state => state.showNccPCommand);
+  const setShowNccPCommand = useAppStore(state => state.setShowNccPCommand);
+  const auditStateVersion = useAppStore(state => state.auditStateVersion);
+
 
   // Full MATLAB-style per-figure graph configuration
   const defaultGraphConfig = {
@@ -269,7 +272,7 @@ export function DailyEvaluationGraph({
         setEvalDataState(null);
       }
     })();
-  }, [project]);
+  }, [project, auditStateVersion]);
 
   // JS Implementation of MATLAB alloc_with_limits
   const runAllocWithLimits = (
@@ -701,6 +704,8 @@ export function DailyEvaluationGraph({
 
       let parsedTotals = { plant1: NaN, plant2: NaN, plant3: NaN };
       let parsedDaily = { plant1: NaN, plant2: NaN, plant3: NaN };
+      let parsedAvgTotal = NaN;
+      let parsedAvgDaily = NaN;
       if (essFiles.length > 0) {
         try {
           const allParsedRows: any[] = [];
@@ -736,14 +741,11 @@ export function DailyEvaluationGraph({
             const p3Blocks = buildPlantCycleTableJs(p3Rows, 'SWG03');
 
             // Try to match the exact mathematical values calculated by CycleCalculation.tsx
-            const cycleHistoryStr = localStorage.getItem(`cycle_history_${project}`);
-            let cycleHistory: any[] = [];
-            if (cycleHistoryStr) {
-              try { cycleHistory = JSON.parse(cycleHistoryStr); } catch (e) {}
-            }
+            const cycleHistory = (await getDBItem<any[]>(`cycle_history_${project}`)) || [];
             
-            const dateStr = parsedData.date; // e.g. "2026-06-02"
+            const dateStr = parsedData.dataDate; // e.g. "2026-06-02"
             const matchingDay = cycleHistory.find(r => r.DataDate === dateStr);
+            console.log("DailyEvaluationGraph parsedData.dataDate:", dateStr, "cycleHistory length:", cycleHistory.length, "matchingDay found:", !!matchingDay);
             
             if (matchingDay) {
               parsedTotals.plant1 = matchingDay.SWG01_TotalCycle || NaN;
@@ -753,11 +755,30 @@ export function DailyEvaluationGraph({
               parsedDaily.plant1 = matchingDay.SWG01_DailyReached !== null ? matchingDay.SWG01_DailyReached : NaN;
               parsedDaily.plant2 = matchingDay.SWG02_DailyReached !== null ? matchingDay.SWG02_DailyReached : NaN;
               parsedDaily.plant3 = matchingDay.SWG03_DailyReached !== null ? matchingDay.SWG03_DailyReached : NaN;
+
+              if (matchingDay.Average_Total_Plant_Cycle !== undefined && matchingDay.Average_Total_Plant_Cycle !== null) {
+                parsedAvgTotal = matchingDay.Average_Total_Plant_Cycle;
+              }
+              if (matchingDay.Average_Daily_Cycle !== undefined && matchingDay.Average_Daily_Cycle !== null) {
+                parsedAvgDaily = matchingDay.Average_Daily_Cycle;
+              }
             } else {
               // Fallback to internal parsing if the CycleCalculation tab wasn't run for this dataset yet
               if (p1Blocks.length > 0) parsedTotals.plant1 = p1Blocks[0].AverageCycleOfSPPC || NaN;
               if (p2Blocks.length > 0) parsedTotals.plant2 = p2Blocks[0].AverageCycleOfSPPC || NaN;
               if (p3Blocks.length > 0) parsedTotals.plant3 = p3Blocks[0].AverageCycleOfSPPC || NaN;
+              
+              const isBessProject = project.includes('BESS') || project === 'SNTB30MWH';
+              let allValid = [...p1Blocks.filter(b => b.LastEquivalentNumberOfCycle !== null && !isNaN(b.LastEquivalentNumberOfCycle))];
+              if (!isBessProject) {
+                allValid = [...allValid, ...p2Blocks.filter(b => b.LastEquivalentNumberOfCycle !== null && !isNaN(b.LastEquivalentNumberOfCycle))];
+              }
+              if (project !== 'SNTL400' && project !== 'SNTB30MWH') {
+                allValid = [...allValid, ...p3Blocks.filter(b => b.LastEquivalentNumberOfCycle !== null && !isNaN(b.LastEquivalentNumberOfCycle))];
+              }
+              if (allValid.length > 0) {
+                parsedAvgTotal = allValid.reduce((s, b) => s + b.LastEquivalentNumberOfCycle, 0) / allValid.length;
+              }
   
               const getDailyDiff = (rows: any[]) => {
                 const byBlock: Record<number, Record<number, any>> = {};
@@ -779,12 +800,23 @@ export function DailyEvaluationGraph({
                     if (!isNaN(b.last) && !isNaN(b.first)) essDiffs.push(b.last - b.first);
                   });
                 }
-                return essDiffs.length > 0 ? essDiffs.reduce((a, b) => a + b, 0) / essDiffs.length : NaN;
+                return essDiffs;
               };
   
-              parsedDaily.plant1 = getDailyDiff(p1Rows);
-              parsedDaily.plant2 = getDailyDiff(p2Rows);
-              parsedDaily.plant3 = getDailyDiff(p3Rows);
+              const diffsP1 = getDailyDiff(p1Rows);
+              const diffsP2 = getDailyDiff(p2Rows);
+              const diffsP3 = getDailyDiff(p3Rows);
+
+              parsedDaily.plant1 = diffsP1.length > 0 ? diffsP1.reduce((a, b) => a + b, 0) / diffsP1.length : NaN;
+              parsedDaily.plant2 = diffsP2.length > 0 ? diffsP2.reduce((a, b) => a + b, 0) / diffsP2.length : NaN;
+              parsedDaily.plant3 = diffsP3.length > 0 ? diffsP3.reduce((a, b) => a + b, 0) / diffsP3.length : NaN;
+              
+              let allDiffs = [...diffsP1];
+              if (!isBessProject) allDiffs = [...allDiffs, ...diffsP2];
+              if (project !== 'SNTL400' && project !== 'SNTB30MWH') allDiffs = [...allDiffs, ...diffsP3];
+              if (allDiffs.length > 0) {
+                parsedAvgDaily = allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length;
+              }
             }
           }
         } catch (e) {
@@ -798,11 +830,33 @@ export function DailyEvaluationGraph({
         plant3: !isNaN(parsedDaily.plant3) ? parsedDaily.plant3 : (isNaN(cycleP3) ? 0.879 : cycleP3),
       };
 
+      if (!isNaN(parsedAvgDaily)) {
+        parsedData.avgDailyCycle = parsedAvgDaily;
+      } else {
+        const d1 = parsedData.dailyCycle.plant1;
+        const d2 = parsedData.dailyCycle.plant2;
+        const d3 = parsedData.dailyCycle.plant3;
+        const hasP2 = project !== 'SNTB30MWH';
+        const hasP3 = project !== 'SNTL400' && project !== 'SNTB30MWH';
+        parsedData.avgDailyCycle = (d1 + (hasP2 ? d2 : 0) + (hasP3 ? d3 : 0)) / (hasP3 ? 3 : (hasP2 ? 2 : 1));
+      }
+
       parsedData.totalCycle = {
         plant1: isNaN(parsedTotals.plant1) ? 170.546875 : parsedTotals.plant1,
         plant2: isNaN(parsedTotals.plant2) ? 171.875000 : parsedTotals.plant2,
         plant3: isNaN(parsedTotals.plant3) ? 171.666667 : parsedTotals.plant3,
       };
+
+      if (!isNaN(parsedAvgTotal)) {
+        parsedData.avgTotalCycle = parsedAvgTotal;
+      } else {
+        const t1 = parsedData.totalCycle.plant1;
+        const t2 = parsedData.totalCycle.plant2;
+        const t3 = parsedData.totalCycle.plant3;
+        const hasP2 = project !== 'SNTB30MWH';
+        const hasP3 = project !== 'SNTL400' && project !== 'SNTB30MWH';
+        parsedData.avgTotalCycle = (t1 + (hasP2 ? t2 : 0) + (hasP3 ? t3 : 0)) / (hasP3 ? 3 : (hasP2 ? 2 : 1));
+      }
 
       // Extract SOC stats (high peak & low peak indices)
       const getSocStats = (socArr: number[]) => {
@@ -1314,7 +1368,7 @@ export function DailyEvaluationGraph({
               `Plant 02 Total Cycle = ${evalData.totalCycle.plant2.toFixed(6)}`
             ];
             if (hasPlant3) lines.push(`Plant 03 Total Cycle = ${evalData.totalCycle.plant3.toFixed(6)}`);
-            lines.push(`Average Total Plant Cycle = ${avgTotal.toFixed(6)}`);
+            lines.push(`Average Total Plant Cycle = ${Number(avgTotal.toFixed(6))}`);
             drawInfoBox(lines, 160, yOffset + 60, graphConfig.bgWhite, 0, lines.length - 1);
 
             if (evalData.deviations && evalData.deviations.highSOC) {
@@ -1351,10 +1405,15 @@ export function DailyEvaluationGraph({
 
     // Convert timestamps to string representation for serialization
     const timestampsStr = evalData.timestamps.map((t: any) => new Date(t).toISOString());
-    const serializedEvalData = {
+    let serializedEvalData = {
       ...evalData,
       timestamps: timestampsStr
     };
+    
+    if ((project === 'SNTL400' || project === 'SNTL600') && showNccPCommand) {
+      serializedEvalData = { ...serializedEvalData, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+    }
+
 
     const dataJson = JSON.stringify(serializedEvalData).replace(/</g, '\\u003c');
     const configJson = JSON.stringify(graphConfig).replace(/</g, '\\u003c');
@@ -1951,7 +2010,7 @@ export function DailyEvaluationGraph({
                 'Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6)
               ];
               if (hasPlant3) lines.push('Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6));
-              lines.push('Average Total Plant Cycle = ' + avgTotal.toFixed(6));
+              lines.push('Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)));
               drawInfoBox(lines, 160, yOffset + 60, bgWhite, 0, lines.length - 1);
 
               if (evalDataRaw.deviations && evalDataRaw.deviations.highSOC) {
@@ -2402,8 +2461,8 @@ export function DailyEvaluationGraph({
 
           const traces = [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 2 } }, 0),
-            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 2 } }, 3)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'soc_p_' + pk);
@@ -2428,7 +2487,7 @@ export function DailyEvaluationGraph({
             applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
             applyTrace({ y: evalDataRaw.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalDataRaw.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv', dash: 'dot' } }, 4)
           ];
-          const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'v_q_' + pk);
+          const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], 'v_q_' + pk);
           createPlotWithEvents(div, traces, layout, 'v_q_' + pk);
         });
       } else if (activeMetric === 'pf_p1' || activeMetric === 'pf_p2' || activeMetric === 'pf_p3') {
@@ -2464,8 +2523,8 @@ export function DailyEvaluationGraph({
         containerDiv.appendChild(div2);
         createPlotWithEvents(div2, [
           applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-          applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-          applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+          applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+          applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
           applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
         ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, activeMetric + '_soc_' + pk), activeMetric + '_soc_' + pk);
 
@@ -2484,7 +2543,7 @@ export function DailyEvaluationGraph({
           applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
           applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
           applyTrace({ y: evalDataRaw.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalDataRaw.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4)
-        ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], activeMetric + '_vq_' + pk), activeMetric + '_vq_' + pk);
+        ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], activeMetric + '_vq_' + pk), activeMetric + '_vq_' + pk);
       } else if (activeMetric === 'fig4') {
         plants.forEach(pk => {
           const containerDiv = document.createElement('div');
@@ -2516,8 +2575,8 @@ export function DailyEvaluationGraph({
           containerDiv.appendChild(div2);
           createPlotWithEvents(div2, [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
           ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'fig4_soc_' + pk), 'fig4_soc_' + pk);
 
@@ -2536,11 +2595,11 @@ export function DailyEvaluationGraph({
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
             applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
             applyTrace({ y: evalDataRaw.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: (evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean((evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
-          ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'fig4_vq_' + pk), 'fig4_vq_' + pk);
+          ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], 'fig4_vq_' + pk), 'fig4_vq_' + pk);
         });
       } else if (activeMetric === 'fig5') {
-        const avgDaily = (evalDataRaw.dailyCycle.plant1 + evalDataRaw.dailyCycle.plant2 + (hasPlant3 ? evalDataRaw.dailyCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
-        const avgTotal = (evalDataRaw.totalCycle.plant1 + evalDataRaw.totalCycle.plant2 + (hasPlant3 ? evalDataRaw.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
+        const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : (evalDataRaw.dailyCycle.plant1 + evalDataRaw.dailyCycle.plant2 + (hasPlant3 ? evalDataRaw.dailyCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
+        const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : (evalDataRaw.totalCycle.plant1 + evalDataRaw.totalCycle.plant2 + (hasPlant3 ? evalDataRaw.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
 
         plants.forEach((pk, statsIndex) => {
           const div = document.createElement('div');
@@ -2558,14 +2617,14 @@ export function DailyEvaluationGraph({
               '<div>Cycle_Plant 01 = ' + evalDataRaw.dailyCycle.plant1.toFixed(3) + ' -> ' + (evalDataRaw.dailyCycle.plant1 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant1 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant1 > 1 ? 'Alert' : 'Normal')) + '</div>' +
               '<div>Cycle_Plant 02 = ' + evalDataRaw.dailyCycle.plant2.toFixed(3) + ' -> ' + (evalDataRaw.dailyCycle.plant2 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant2 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant2 > 1 ? 'Alert' : 'Normal')) + '</div>' +
               (hasPlant3 ? '<div>Cycle_Plant 03 = ' + evalDataRaw.dailyCycle.plant3.toFixed(3) + ' -> ' + (evalDataRaw.dailyCycle.plant3 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant3 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant3 > 1 ? 'Alert' : 'Normal')) + '</div>' : '') +
-              '<div class="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Cycle_Average Daily Cycle = ' + avgDaily.toFixed(3) + ' -> ' + (avgDaily < 0.5 ? 'Take action' : avgDaily < 0.8 ? 'Warning' : (project === 'SNTL400' && avgDaily > 1 ? 'Alert' : 'Normal')) + '</div>';
+              '<div class="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Cycle_Average Daily Cycle = ' + Number(avgDaily.toFixed(4)) + ' -> ' + (avgDaily < 0.5 ? 'Take action' : avgDaily < 0.8 ? 'Warning' : (project === 'SNTL400' && avgDaily > 1 ? 'Alert' : 'Normal')) + '</div>';
             div.appendChild(overlay);
           } else if (statsIndex === 1) {
             overlay.innerHTML = '<div class="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Plant Total Cycle (' + evalDataRaw.dataDate + '):</div>' +
               '<div>Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6) + '</div>' +
               '<div>Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6) + '</div>' +
               (hasPlant3 ? '<div>Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6) + '</div>' : '') +
-              '<div class="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Average Total Plant Cycle = ' + avgTotal.toFixed(6) + '</div>';
+              '<div class="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)) + '</div>';
             div.appendChild(overlay);
           } else if (statsIndex === 2) {
             overlay.innerHTML = '<div class="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Max deviation timings:</div>';
@@ -2579,8 +2638,8 @@ export function DailyEvaluationGraph({
           const socStats = evalDataRaw.socStats[pk];
           const traces = [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
             applyTrace({ y: evalDataRaw.dispatchP?.[pk], type: 'scattergl', mode: 'lines', name: 'P dispatch allocation', showlegend: Boolean(evalDataRaw.dispatchP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#339933', width: 1.8, dash: 'dash' } }, 3),
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 4)
           ];
@@ -2667,7 +2726,7 @@ export function DailyEvaluationGraph({
             applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
             applyTrace({ y: evalDataRaw.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: (evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean((evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
           ];
-          const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'fig6_' + pk);
+          const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], 'fig6_' + pk);
           createPlotWithEvents(div, traces, layout, 'fig6_' + pk);
         });
       }
@@ -2837,10 +2896,15 @@ export function DailyEvaluationGraph({
 
     // Convert timestamps to string representation for serialization
     const timestampsStr = evalData.timestamps.map((t: any) => new Date(t).toISOString());
-    const serializedEvalData = {
+    let serializedEvalData = {
       ...evalData,
       timestamps: timestampsStr
     };
+    
+    if ((project === 'SNTL400' || project === 'SNTL600') && showNccPCommand) {
+      serializedEvalData = { ...serializedEvalData, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+    }
+
 
     const dataJson = JSON.stringify(serializedEvalData).replace(/</g, '\\u003c');
     const configJson = JSON.stringify(graphConfig).replace(/</g, '\\u003c');
@@ -3447,11 +3511,11 @@ export function DailyEvaluationGraph({
               const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : 0;
               const lines = [
                 'Daily cycle (' + evalDataRaw.dataDate + '):',
-                'Cycle_Plant 01 = ' + evalDataRaw.dailyCycle.plant1.toFixed(3) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant1),
-                'Cycle_Plant 02 = ' + evalDataRaw.dailyCycle.plant2.toFixed(3) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant2)
+                'Cycle_Plant 01 = ' + Number(evalDataRaw.dailyCycle.plant1.toFixed(4)) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant1),
+                'Cycle_Plant 02 = ' + Number(evalDataRaw.dailyCycle.plant2.toFixed(4)) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant2)
               ];
-              if (hasPlant3) lines.push('Cycle_Plant 03 = ' + evalDataRaw.dailyCycle.plant3.toFixed(3) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant3));
-              lines.push('Cycle_Average Daily Cycle = ' + avgDaily.toFixed(3) + ' -> ' + getStatus(avgDaily));
+              if (hasPlant3) lines.push('Cycle_Plant 03 = ' + Number(evalDataRaw.dailyCycle.plant3.toFixed(4)) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant3));
+              lines.push('Cycle_Average Daily Cycle = ' + Number(avgDaily.toFixed(4)) + ' -> ' + getStatus(avgDaily));
               drawInfoBox(lines, 160, yOffset + 60, bgWhite, 0, lines.length - 1);
             }
 
@@ -3463,7 +3527,7 @@ export function DailyEvaluationGraph({
                 'Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6)
               ];
               if (hasPlant3) lines.push('Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6));
-              lines.push('Average Total Plant Cycle = ' + avgTotal.toFixed(6));
+              lines.push('Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)));
               drawInfoBox(lines, 160, yOffset + 60, bgWhite, 0, lines.length - 1);
 
               if (evalDataRaw.deviations && evalDataRaw.deviations.highSOC) {
@@ -3911,8 +3975,8 @@ export function DailyEvaluationGraph({
 
           const traces = [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 2 } }, 0),
-            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 2 } }, 3)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'soc_p_' + pk);
@@ -3937,7 +4001,7 @@ export function DailyEvaluationGraph({
             applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
             applyTrace({ y: evalDataRaw.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalDataRaw.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv', dash: 'dot' } }, 4)
           ];
-          const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'v_q_' + pk);
+          const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], 'v_q_' + pk);
           createPlotWithEvents(div, traces, layout, 'v_q_' + pk);
         });
       } else if (activeMetric === 'pf_p1' || activeMetric === 'pf_p2' || activeMetric === 'pf_p3') {
@@ -3973,8 +4037,8 @@ export function DailyEvaluationGraph({
         containerDiv.appendChild(div2);
         createPlotWithEvents(div2, [
           applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-          applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-          applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+          applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+          applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
           applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
         ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, activeMetric + '_soc_' + pk), activeMetric + '_soc_' + pk);
 
@@ -3993,7 +4057,7 @@ export function DailyEvaluationGraph({
           applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
           applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
           applyTrace({ y: evalDataRaw.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalDataRaw.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4)
-        ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], activeMetric + '_vq_' + pk), activeMetric + '_vq_' + pk);
+        ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], activeMetric + '_vq_' + pk), activeMetric + '_vq_' + pk);
       } else if (activeMetric === 'fig4') {
         plants.forEach(pk => {
           const containerDiv = document.createElement('div');
@@ -4025,8 +4089,8 @@ export function DailyEvaluationGraph({
           containerDiv.appendChild(div2);
           createPlotWithEvents(div2, [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
           ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'fig4_soc_' + pk), 'fig4_soc_' + pk);
 
@@ -4045,11 +4109,11 @@ export function DailyEvaluationGraph({
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
             applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
             applyTrace({ y: evalDataRaw.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: (evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean((evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
-          ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'fig4_vq_' + pk), 'fig4_vq_' + pk);
+          ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], 'fig4_vq_' + pk), 'fig4_vq_' + pk);
         });
       } else if (activeMetric === 'fig5') {
-        const avgDaily = (evalDataRaw.dailyCycle.plant1 + evalDataRaw.dailyCycle.plant2 + (hasPlant3 ? evalDataRaw.dailyCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
-        const avgTotal = (evalDataRaw.totalCycle.plant1 + evalDataRaw.totalCycle.plant2 + (hasPlant3 ? evalDataRaw.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
+        const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : (evalDataRaw.dailyCycle.plant1 + evalDataRaw.dailyCycle.plant2 + (hasPlant3 ? evalDataRaw.dailyCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
+        const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : (evalDataRaw.totalCycle.plant1 + evalDataRaw.totalCycle.plant2 + (hasPlant3 ? evalDataRaw.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
 
         plants.forEach((pk, statsIndex) => {
           const div = document.createElement('div');
@@ -4059,37 +4123,59 @@ export function DailyEvaluationGraph({
           div.style.position = 'relative';
           chartArea.appendChild(div);
 
-          const overlay = document.createElement('div');
-          overlay.className = 'absolute top-10 left-16 z-20 bg-white/95 border border-blue-500/80 px-2 py-1 text-[7.5px] font-mono text-black shadow-sm rounded-sm pointer-events-none leading-relaxed flex flex-col max-w-[230px]';
+          const boxAnnotations = [];
           
           if (statsIndex === 0) {
-            overlay.innerHTML = '<div class="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Daily cycle (' + evalDataRaw.dataDate + '):</div>' +
-              '<div>Cycle_Plant 01 = ' + evalDataRaw.dailyCycle.plant1.toFixed(3) + ' -> ' + (evalDataRaw.dailyCycle.plant1 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant1 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant1 > 1 ? 'Alert' : 'Normal')) + '</div>' +
-              '<div>Cycle_Plant 02 = ' + evalDataRaw.dailyCycle.plant2.toFixed(3) + ' -> ' + (evalDataRaw.dailyCycle.plant2 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant2 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant2 > 1 ? 'Alert' : 'Normal')) + '</div>' +
-              (hasPlant3 ? '<div>Cycle_Plant 03 = ' + evalDataRaw.dailyCycle.plant3.toFixed(3) + ' -> ' + (evalDataRaw.dailyCycle.plant3 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant3 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant3 > 1 ? 'Alert' : 'Normal')) + '</div>' : '') +
-              '<div class="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Cycle_Average Daily Cycle = ' + avgDaily.toFixed(3) + ' -> ' + (avgDaily < 0.5 ? 'Take action' : avgDaily < 0.8 ? 'Warning' : (project === 'SNTL400' && avgDaily > 1 ? 'Alert' : 'Normal')) + '</div>';
-            div.appendChild(overlay);
+            boxAnnotations.push({
+              x: 0.05, y: 0.95, xref: 'paper', yref: 'paper',
+              xanchor: 'left', yanchor: 'top',
+              text: '<b>Daily cycle (' + evalDataRaw.dataDate + '):</b><br>Cycle_Plant 01 = ' + Number(evalDataRaw.dailyCycle.plant1.toFixed(4)) + ' -> ' + (evalDataRaw.dailyCycle.plant1 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant1 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant1 > 1 ? 'Alert' : 'Normal')) + '<br>Cycle_Plant 02 = ' + Number(evalDataRaw.dailyCycle.plant2.toFixed(4)) + ' -> ' + (evalDataRaw.dailyCycle.plant2 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant2 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant2 > 1 ? 'Alert' : 'Normal')) + (hasPlant3 ? '<br>Cycle_Plant 03 = ' + Number(evalDataRaw.dailyCycle.plant3.toFixed(4)) + ' -> ' + (evalDataRaw.dailyCycle.plant3 < 0.5 ? 'Take action' : evalDataRaw.dailyCycle.plant3 < 0.8 ? 'Warning' : (project === 'SNTL400' && evalDataRaw.dailyCycle.plant3 > 1 ? 'Alert' : 'Normal')) : '') + '<br><span style="color: #2563EB"><b>Cycle_Average Daily Cycle = ' + Number(avgDaily.toFixed(4)) + ' -> ' + (avgDaily < 0.5 ? 'Take action' : avgDaily < 0.8 ? 'Warning' : (project === 'SNTL400' && avgDaily > 1 ? 'Alert' : 'Normal')) + '</b></span>',
+              showarrow: false,
+              bgcolor: graphConfig.bgWhite ? 'rgba(255,255,255,0.95)' : 'rgba(20,20,40,0.95)',
+              bordercolor: 'rgba(59, 130, 246, 0.8)',
+              borderwidth: 1,
+              font: { size: 10, color: graphConfig.bgWhite ? '#000' : '#E0E0E0', family: 'JetBrains Mono, monospace' },
+              align: 'left',
+              borderpad: 6,
+              captureevents: true
+            });
           } else if (statsIndex === 1) {
-            overlay.innerHTML = '<div class="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Plant Total Cycle (' + evalDataRaw.dataDate + '):</div>' +
-              '<div>Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6) + '</div>' +
-              '<div>Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6) + '</div>' +
-              (hasPlant3 ? '<div>Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6) + '</div>' : '') +
-              '<div class="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Average Total Plant Cycle = ' + avgTotal.toFixed(6) + '</div>';
-            div.appendChild(overlay);
-          } else if (statsIndex === 2) {
-            overlay.innerHTML = '<div class="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Max deviation timings:</div>';
+            boxAnnotations.push({
+              x: 0.05, y: 0.95, xref: 'paper', yref: 'paper',
+              xanchor: 'left', yanchor: 'top',
+              text: '<b>Plant Total Cycle (' + evalDataRaw.dataDate + '):</b><br>Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6) + '<br>Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6) + (hasPlant3 ? '<br>Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6) : '') + '<br><span style="color: #2563EB"><b>Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)) + '</b></span>',
+              showarrow: false,
+              bgcolor: graphConfig.bgWhite ? 'rgba(255,255,255,0.95)' : 'rgba(20,20,40,0.95)',
+              bordercolor: 'rgba(59, 130, 246, 0.8)',
+              borderwidth: 1,
+              font: { size: 10, color: graphConfig.bgWhite ? '#000' : '#E0E0E0', family: 'JetBrains Mono, monospace' },
+              align: 'left',
+              borderpad: 6,
+              captureevents: true
+            });
+            
             if (evalDataRaw.deviations && evalDataRaw.deviations.highSOC) {
-              overlay.innerHTML += '<div>Max deviation (HIGH SOC): ' + evalDataRaw.deviations.highSOC.pair + ' = ' + evalDataRaw.deviations.highSOC.text + '</div>' +
-                '<div>Max deviation (LOW SOC): ' + evalDataRaw.deviations.lowSOC.pair + ' = ' + evalDataRaw.deviations.lowSOC.text + '</div>';
+              boxAnnotations.push({
+                x: 0.35, y: 0.95, xref: 'paper', yref: 'paper',
+                xanchor: 'left', yanchor: 'top',
+                text: '<b>Max deviation timings:</b><br>Max deviation (HIGH SOC): ' + evalDataRaw.deviations.highSOC.pair + ' = ' + evalDataRaw.deviations.highSOC.text + '<br>Max deviation (LOW SOC): ' + evalDataRaw.deviations.lowSOC.pair + ' = ' + evalDataRaw.deviations.lowSOC.text,
+                showarrow: false,
+                bgcolor: graphConfig.bgWhite ? 'rgba(255,255,255,0.95)' : 'rgba(20,20,40,0.95)',
+                bordercolor: 'rgba(59, 130, 246, 0.8)',
+                borderwidth: 1,
+                font: { size: 10, color: graphConfig.bgWhite ? '#000' : '#E0E0E0', family: 'JetBrains Mono, monospace' },
+                align: 'left',
+                borderpad: 6,
+                captureevents: true
+              });
             }
-            div.appendChild(overlay);
           }
 
           const socStats = evalDataRaw.socStats[pk];
           const traces = [
             applyTrace({ y: evalDataRaw.pTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scattergl', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
             applyTrace({ y: evalDataRaw.dispatchP?.[pk], type: 'scattergl', mode: 'lines', name: 'P dispatch allocation', showlegend: Boolean(evalDataRaw.dispatchP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#339933', width: 1.8, dash: 'dash' } }, 3),
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 4)
           ];
@@ -4154,7 +4240,7 @@ export function DailyEvaluationGraph({
           }
 
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Active Power & SOC', 'P (MW)', 'SOC (%)', [0, 100], [-100, 100], 'fig5_' + pk);
-          layout.annotations = [...layout.annotations, ...annotations];
+          layout.annotations = [...(layout.annotations || []), ...annotations, ...boxAnnotations];
           createPlotWithEvents(div, traces, layout, 'fig5_' + pk);
         });
       } else if (activeMetric === 'fig6') {
@@ -4176,7 +4262,7 @@ export function DailyEvaluationGraph({
             applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
             applyTrace({ y: evalDataRaw.cmdQ?.[pk], type: 'scattergl', mode: 'lines', name: (evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean((evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
           ];
-          const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], 'fig6_' + pk);
+          const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], 'fig6_' + pk);
           createPlotWithEvents(div, traces, layout, 'fig6_' + pk);
         });
       }
@@ -4646,8 +4732,8 @@ export function DailyEvaluationGraph({
               applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v) && Math.abs(Number(v)) > 0.001) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',             line: { color: '#0072BD', width: 2 } }, 0),
               applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#EDB120', width: 2 } }, 10),
               applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#77AC30', width: 2 } }, 11),
-              applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)),   line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 3),
-              applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 4),
+              applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)),   line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 3),
+              applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 4),
               applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',     line: { color: '#D95319', width: 2 } }, 5),
             ]}
             layout={getMATLABLayout(title, 'P (MW)', 'SOC (%)', undefined, undefined, `soc_p_${pk}`)}
@@ -4680,7 +4766,7 @@ export function DailyEvaluationGraph({
               applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
               applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv', dash: 'dot' } }, 4),
             ]}
-            layout={getMATLABLayout(title, 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], `v_q_${pk}`)}
+            layout={getMATLABLayout(title, 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], `v_q_${pk}`)}
             useResizeHandler={true} style={{ width: '100%', height: '100%' }} config={plotCfgZoom} onClick={undefined} onHover={(e) => handleHover(e, `v_q_${pk}`)} onUnhover={handleUnhover} onRelayout={(e) => handleRelayout(e, `v_q_${pk}`)} onClickAnnotation={(e) => handleClickAnnotation(e, `v_q_${pk}`)}
           />
         </div>
@@ -4718,8 +4804,8 @@ export function DailyEvaluationGraph({
                 applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v) && Math.abs(Number(v)) > 0.001) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',            line: { color: '#0072BD', width: 1.2 } }, 0),
                 applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#EDB120', width: 2 } }, 10),
                 applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#77AC30', width: 2 } }, 11),
-                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
                 applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',   line: { color: '#D95319', width: 1.2 } }, 3),
               ]}
               layout={{...getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, `pf_${pk}_soc`), annotations: getCycleAnnotations(pk as any)}}
@@ -4734,7 +4820,7 @@ export function DailyEvaluationGraph({
                 applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
                 applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4),
               ]}
-              layout={getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], `pf_${pk}_vq`)}
+              layout={getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], `pf_${pk}_vq`)}
               useResizeHandler={true} style={{ width: '100%', height: '100%' }} config={plotCfgZoom} onClick={undefined} onHover={(e) => handleHover(e, `pf_${pk}_vq`)} onUnhover={handleUnhover} onRelayout={(e) => handleRelayout(e, `pf_${pk}_vq`)} onClickAnnotation={(e) => handleClickAnnotation(e, `pf_${pk}_vq`)}
             />
           </div>
@@ -4777,8 +4863,8 @@ export function DailyEvaluationGraph({
                 applyTrace({ x: filteredTimeX, y: evalData.pPccPVS?.[pk]?.some((v) => v != null && !isNaN(v) && Math.abs(Number(v)) > 0.001) ? evalData.pPccPVS?.[pk] : evalData.pTotal?.[pk],  type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)',            line: { color: '#0072BD', width: 1.2 } }, 0),
                 applyTrace({ x: filteredTimeX, y: evalData.pPV?.[pk],     type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalData.pPV?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#EDB120', width: 2 } }, 10),
                 applyTrace({ x: filteredTimeX, y: evalData.pBESS?.[pk],   type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalData.pBESS?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#77AC30', width: 2 } }, 11),
-                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
-                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#731A66', width: 1.6, shape: 'hv' } }, 2),
+                applyTrace({ x: filteredTimeX, y: evalData.cmdP?.[pk],    type: 'scattergl', mode: 'lines', name: 'P command from NCC', visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true, showlegend: Boolean(evalData.cmdP?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dash' } }, 1),
+                applyTrace({ x: filteredTimeX, y: evalData.remoteP?.[pk], type: 'scattergl', mode: 'lines', connectgaps: true, name: 'Remote Active Power', visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true, showlegend: Boolean(evalData.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' } }, 2),
                 applyTrace({ x: filteredTimeX, y: evalData.soc?.[pk],     type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2',   line: { color: '#D95319', width: 1.2 } }, 3),
               ]}
               layout={{...getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, `fig4_soc_${pk}`), annotations: getCycleAnnotations(pk as any)}}
@@ -4793,7 +4879,7 @@ export function DailyEvaluationGraph({
                 applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
                 applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4),
               ]}
-              layout={getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], `fig4_vq_${pk}`)}
+              layout={getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], `fig4_vq_${pk}`)}
               useResizeHandler={true} style={{ width: '100%', height: '100%' }} config={plotCfgZoom} onClick={undefined} onHover={(e) => handleHover(e, `fig4_vq_${pk}`)} onUnhover={handleUnhover} onRelayout={(e) => handleRelayout(e, `fig4_vq_${pk}`)} onClickAnnotation={(e) => handleClickAnnotation(e, `fig4_vq_${pk}`)}
             />
           </div>
@@ -4816,8 +4902,8 @@ export function DailyEvaluationGraph({
       const hasPlant2 = (evalData.pTotal.plant2 && evalData.pTotal.plant2.some(v => !isNaN(v))) || (evalData.soc.plant2 && evalData.soc.plant2.some(v => !isNaN(v)));
         const plants = getProjectPlants(typeof project === 'string' ? project : '');
         const hasPlant3 = plants.includes('plant3') && evalData.soc.plant3 && evalData.soc.plant3.some((v: any) => !isNaN(v));
-      const avgDaily = (evalData.dailyCycle.plant1 + (hasPlant2 ? evalData.dailyCycle.plant2 : 0) + (hasPlant3 ? evalData.dailyCycle.plant3 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1));
-      const avgTotal = (evalData.totalCycle.plant1 + (hasPlant2 ? evalData.totalCycle.plant2 : 0) + (hasPlant3 ? evalData.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1));
+      const avgDaily = !isNaN(evalData.avgDailyCycle) ? evalData.avgDailyCycle : (evalData.dailyCycle.plant1 + (hasPlant2 ? evalData.dailyCycle.plant2 : 0) + (hasPlant3 ? evalData.dailyCycle.plant3 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1));
+      const avgTotal = !isNaN(evalData.avgTotalCycle) ? evalData.avgTotalCycle : (evalData.totalCycle.plant1 + (hasPlant2 ? evalData.totalCycle.plant2 : 0) + (hasPlant3 ? evalData.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1));
 
       const drawPanel = (pKey: 'plant1' | 'plant2' | 'plant3', title: string, statsIndex: number) => {
         const socStats = evalData.socStats[pKey];
@@ -4836,8 +4922,10 @@ export function DailyEvaluationGraph({
             y: evalData.cmdP[pKey],
             type: 'scattergl',
             mode: 'lines',
-            name: 'P command from NCC', showlegend: Boolean(evalData.cmdP?.[pKey]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)),
-            line: { color: '#D95319', width: 1.6, shape: 'hv' }
+            name: 'P command from NCC', 
+            visible: (project === 'SNTL400' || project === 'SNTL600') ? showNccPCommand : true,
+            showlegend: Boolean(evalData.cmdP?.[pKey]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)),
+            line: { color: '#008000', width: 1.6, dash: 'dash', shape: 'hv' }
           },
           {
             x: timeX,
@@ -4845,7 +4933,9 @@ export function DailyEvaluationGraph({
             type: 'scattergl',
             mode: 'lines',
             name: 'Remote Active Power',
-            line: { color: '#731A66', width: 1.6 }
+            visible: (project === 'SNTL400' || project === 'SNTL600') ? !showNccPCommand : true,
+            showlegend: Boolean(evalData.remoteP?.[pKey]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)),
+            line: { color: '#9966cc', width: 1.6, dash: 'dash', shape: 'hv' }
           },
           {
             x: timeX,
@@ -4951,10 +5041,10 @@ export function DailyEvaluationGraph({
               <DraggableOverlay initialX={64} initialY={40}>
                 <div className="bg-white/95 border border-blue-500/80 px-2 py-1 text-[7.5px] font-mono text-black shadow-sm rounded-sm leading-relaxed flex flex-col max-w-[190px]">
                   <div className="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Daily cycle ({evalData.dataDate}):</div>
-                  <div>Cycle_Plant 01 = {evalData.dailyCycle.plant1.toFixed(3)} -&gt; {evalData.dailyCycle.plant1 < 0.5 ? 'Take action' : evalData.dailyCycle.plant1 < 0.8 ? 'Warning' : (plants.length === 2 && evalData.dailyCycle.plant1 > 1 ? 'Alert' : 'Normal')}</div>
-                  {hasPlant2 && <div>Cycle_Plant 02 = {evalData.dailyCycle.plant2.toFixed(3)} -&gt; {evalData.dailyCycle.plant2 < 0.5 ? 'Take action' : evalData.dailyCycle.plant2 < 0.8 ? 'Warning' : (plants.length === 2 && evalData.dailyCycle.plant2 > 1 ? 'Alert' : 'Normal')}</div>}
-                  {hasPlant3 && <div>Cycle_Plant 03 = {evalData.dailyCycle.plant3.toFixed(3)} -&gt; {evalData.dailyCycle.plant3 < 0.5 ? 'Take action' : evalData.dailyCycle.plant3 < 0.8 ? 'Warning' : (plants.length === 2 && evalData.dailyCycle.plant3 > 1 ? 'Alert' : 'Normal')}</div>}
-                  <div className="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Cycle_Average Daily Cycle = {avgDaily.toFixed(3)} -&gt; {avgDaily < 0.5 ? 'Take action' : avgDaily < 0.8 ? 'Warning' : (plants.length === 2 && avgDaily > 1 ? 'Alert' : 'Normal')}</div>
+                  <div>Cycle_Plant 01 = {Number(evalData.dailyCycle.plant1.toFixed(4))} -&gt; {evalData.dailyCycle.plant1 < 0.5 ? 'Take action' : evalData.dailyCycle.plant1 < 0.8 ? 'Warning' : (plants.length === 2 && evalData.dailyCycle.plant1 > 1 ? 'Alert' : 'Normal')}</div>
+                  {hasPlant2 && <div>Cycle_Plant 02 = {Number(evalData.dailyCycle.plant2.toFixed(4))} -&gt; {evalData.dailyCycle.plant2 < 0.5 ? 'Take action' : evalData.dailyCycle.plant2 < 0.8 ? 'Warning' : (plants.length === 2 && evalData.dailyCycle.plant2 > 1 ? 'Alert' : 'Normal')}</div>}
+                  {hasPlant3 && <div>Cycle_Plant 03 = {Number(evalData.dailyCycle.plant3.toFixed(4))} -&gt; {evalData.dailyCycle.plant3 < 0.5 ? 'Take action' : evalData.dailyCycle.plant3 < 0.8 ? 'Warning' : (plants.length === 2 && evalData.dailyCycle.plant3 > 1 ? 'Alert' : 'Normal')}</div>}
+                  <div className="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Cycle_Average Daily Cycle = {Number(avgDaily.toFixed(4))} -&gt; {avgDaily < 0.5 ? 'Take action' : avgDaily < 0.8 ? 'Warning' : (plants.length === 2 && avgDaily > 1 ? 'Alert' : 'Normal')}</div>
                 </div>
               </DraggableOverlay>
             );
@@ -4968,7 +5058,7 @@ export function DailyEvaluationGraph({
                     <div>Plant 01 Total Cycle = {evalData.totalCycle.plant1.toFixed(6)}</div>
                     {hasPlant2 && <div>Plant 02 Total Cycle = {evalData.totalCycle.plant2.toFixed(6)}</div>}
                     {hasPlant3 && <div>Plant 03 Total Cycle = {evalData.totalCycle.plant3.toFixed(6)}</div>}
-                    <div className="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Average Total Plant Cycle = {avgTotal.toFixed(6)}</div>
+                    <div className="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Average Total Plant Cycle = {Number(avgTotal.toFixed(6))}</div>
                   </div>
                 </DraggableOverlay>
                 <DraggableOverlay defaultCentered={true}>
@@ -5028,7 +5118,7 @@ export function DailyEvaluationGraph({
               applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalData.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalData.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalData.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
               applyTrace({ x: filteredTimeX, y: evalData.cmdQ?.[pk],   type: 'scattergl', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalData.cmdQ?.[pk]?.some((v: any) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4),
             ]}
-            layout={getMATLABLayout(title, 'V (kV)', 'Q (MVar)', [-30, 30], [20, 24], `fig6_${pk}`)}
+            layout={getMATLABLayout(title, 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], `fig6_${pk}`)}
             useResizeHandler={true} style={{ width: '100%', height: '100%' }} config={plotCfgZoom} onClick={undefined} onHover={(e) => handleHover(e, `fig6_${pk}`)} onUnhover={handleUnhover} onRelayout={(e) => handleRelayout(e, `fig6_${pk}`)} onClickAnnotation={(e) => handleClickAnnotation(e, `fig6_${pk}`)}
           />
         </div>
@@ -5227,7 +5317,7 @@ export function DailyEvaluationGraph({
             </Button>
             {(project === 'SNTL400' || project === 'SNTL600') && (
               <Button
-                onClick={() => setShowNccPCommand(prev => !prev)}
+                onClick={() => setShowNccPCommand(!showNccPCommand)}
                 className={cn("h-7 text-[9px] font-bold flex items-center gap-1.5 border-0 shadow-sm transition-colors", showNccPCommand ? "bg-amber-600 hover:bg-amber-500 text-white" : "bg-purple-800 hover:bg-purple-700 text-white")}
                 title="Toggle between P Remote Active Power and P Command (NCC)"
               >

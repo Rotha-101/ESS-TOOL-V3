@@ -144,7 +144,7 @@ t.TimeZone = 'local';
 % Define Colors
 cmdColor = [0.8500 0.3250 0.0980];
 cmdQColor = [0 0 0];
-remotePowerColor = [0.45 0.10 0.65];
+remotePowerColor = [0.6 0.4 0.8];
 dispatchColor = [0.20 0.60 0.20];
 vabColor = [0.000 0.447 0.741];
 vbcColor = [0.466 0.674 0.188];
@@ -259,12 +259,12 @@ if any(~isnan(pBESS) & abs(pBESS) > 0.001)
 end
 
 if any(~isnan(cmdP))
-    pCmd = stairs(t, cmdP, 'LineWidth', 1.6, 'Color', cmdColor);
+    pCmd = stairs(t, cmdP, 'LineStyle', '--', 'LineWidth', 1.6, 'Color', [0, 0.5, 0]);
     legH(end+1) = pCmd; legT{end+1} = 'P command from NCC';
     yDataAll = [yDataAll; cmdP(:)];
 end
 if any(~isnan(remoteP))
-    pRem = stairs(t, remoteP, 'LineWidth', 1.6, 'Color', remotePowerColor);
+    pRem = stairs(t, remoteP, 'LineStyle', '--', 'LineWidth', 1.6, 'Color', remotePowerColor);
     legH(end+1) = pRem; legT{end+1} = 'Remote Active Power';
     yDataAll = [yDataAll; remoteP(:)];
 end
@@ -284,11 +284,11 @@ ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD'; hold on;
 ${is20PercentProject(project) ? `vavg = (vab + vbc + vca) / 3;
 pVavg = plot(t, vavg, '-', 'Color', [0.466 0.674 0.188], 'LineWidth', 0.8);
-ylabel('Vavg (kV)');
+ylabel('Vavg (kV)'); ylim([20, 25.6]);
 legH3 = pVavg; legT3 = {'Vavg (kV)'};` : `pVab = plot(t, vab, '-', 'Color', vabColor, 'LineWidth', ${graphConfig.lineWidths[0]});
 pVbc = plot(t, vbc, '-', 'Color', vbcColor, 'LineWidth', ${graphConfig.lineWidths[1]});
 pVca = plot(t, vca, '-', 'Color', vcaColor, 'LineWidth', ${graphConfig.lineWidths[2]});
-ylabel('V (kV)');
+ylabel('V (kV)'); ylim([20, 25.6]);
 legH3 = [pVab, pVbc, pVca]; legT3 = {'Vab', 'Vbc', 'Vca'};`}
 if ${graphConfig.showGrid ? 'true' : 'false'}, grid on; end
 
@@ -433,12 +433,12 @@ if any(~isnan(pBESS) & abs(pBESS) > 0.001)
 end
 
 if any(~isnan(cmdP))
-    pCmd = stairs(t, cmdP, 'LineWidth', 1.6, 'Color', cmdColor);
+    pCmd = stairs(t, cmdP, 'LineStyle', '--', 'LineWidth', 1.6, 'Color', [0, 0.5, 0]);
     legH(end+1) = pCmd; legT{end+1} = 'P command from NCC';
     yDataAll = [yDataAll; cmdP(:)];
 end
 if any(~isnan(remoteP))
-    pRem = plot(t, remoteP, '-', 'LineWidth', 1.6, 'Color', remotePowerColor);
+    pRem = plot(t, remoteP, '--', 'LineWidth', 1.6, 'Color', remotePowerColor);
     legH(end+1) = pRem; legT{end+1} = 'Remote Active Power';
     yDataAll = [yDataAll; remoteP(:)];
 end
@@ -458,11 +458,11 @@ ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD'; hold on;
 ${is20PercentProject(project) ? `vavg = (vab + vbc + vca) / 3;
 pVavg = plot(t, vavg, '-', 'Color', [0.466 0.674 0.188], 'LineWidth', 0.8);
-ylabel('Vavg (kV)');
+ylabel('Vavg (kV)'); ylim([20, 25.6]);
 legH3 = pVavg; legT3 = {'Vavg (kV)'};` : `pVab = plot(t, vab, '-', 'Color', vabColor, 'LineWidth', ${graphConfig.lineWidths[0]});
 pVbc = plot(t, vbc, '-', 'Color', vbcColor, 'LineWidth', ${graphConfig.lineWidths[1]});
 pVca = plot(t, vca, '-', 'Color', vcaColor, 'LineWidth', ${graphConfig.lineWidths[2]});
-ylabel('V (kV)');
+ylabel('V (kV)'); ylim([20, 25.6]);
 legH3 = [pVab, pVbc, pVca]; legT3 = {'Vab', 'Vbc', 'Vca'};`}
 if ${graphConfig.showGrid ? 'true' : 'false'}, grid on; end
 
@@ -552,12 +552,12 @@ if any(~isnan(pBESS) & abs(pBESS) > 0.001)
 end
 
 if any(~isnan(cmdP))
-    pCmd = stairs(t, cmdP, 'LineWidth', 1.6, 'Color', cmdColor);
+    pCmd = stairs(t, cmdP, 'LineStyle', '--', 'LineWidth', 1.6, 'Color', [0, 0.5, 0]);
     legH(end+1) = pCmd; legT{end+1} = 'P command from NCC';
     yDataAll = [yDataAll; cmdP(:)];
 end
 if any(~isnan(remoteP))
-    pRem = plot(t, remoteP, '-', 'LineWidth', 1.6, 'Color', remotePowerColor);
+    pRem = plot(t, remoteP, '--', 'LineWidth', 1.6, 'Color', remotePowerColor);
     legH(end+1) = pRem; legT{end+1} = 'Remote Active Power';
     yDataAll = [yDataAll; remoteP(:)];
 end
@@ -620,43 +620,44 @@ try
     end
 
     cycleLines = {['Daily cycle (', dateStrPrint, '):']};
-    sumDaily = 0; countDaily = 0;
 `;
     plants.forEach((pk) => {
       script += `    if isfield(data, 'dailyCycle') && isfield(data.dailyCycle, '${pk}')
         val = data.dailyCycle.${pk};
-        cycleLines{end+1} = ['  ${plantNameMap[pk]}: ', sprintf('%.3f', val)];
-        sumDaily = sumDaily + val; countDaily = countDaily + 1;
+        cycleLines{end+1} = ['  ${plantNameMap[pk]}: ', sprintf('%.4f', val)];
     end\n`;
     });
     script += `
-    if countDaily > 0, cycleLines{end+1} = ['  Average: ', sprintf('%.3f', sumDaily/countDaily)]; end
+    if isfield(data, 'avgDailyCycle')
+        cycleLines{end+1} = ['  Average: ', sprintf('%.4f', data.avgDailyCycle)];
+    end
 
     totalCycleLines = {['Plant Total Cycle (', dateStrPrint, '):']};
-    sumTotal = 0; countTotal = 0;
 `;
     plants.forEach((pk) => {
       script += `    if isfield(data, 'totalCycle') && isfield(data.totalCycle, '${pk}')
         val = data.totalCycle.${pk};
         totalCycleLines{end+1} = ['  ${plantNameMap[pk]}: ', sprintf('%.6f', val)];
-        sumTotal = sumTotal + val; countTotal = countTotal + 1;
     end\n`;
     });
     script += `
-    if countTotal > 0, totalCycleLines{end+1} = ['  Average: ', sprintf('%.6f', sumTotal/countTotal)]; end
+    if isfield(data, 'avgTotalCycle')
+        totalCycleLines{end+1} = ['  Average: ', sprintf('%.6f', data.avgTotalCycle)];
+    end
 
     txt1 = {'Max deviation timings:', ['  ', txtHigh], ['  ', txtLow]};
-    tb1 = annotation('textbox', [0.01, 0.01, 0.2, 0.05], 'String', txt1, ...
-               'EdgeColor', 'none', 'FontSize', 9, 'BackgroundColor', [1 1 1 0.7], 'FitBoxToText', 'on');
-    makeDraggable(tb1);
-
-    tb2 = annotation('textbox', [0.22, 0.01, 0.15, 0.05], 'String', cycleLines, ...
+    
+    tb2 = annotation('textbox', [0.01, 0.01, 0.15, 0.05], 'String', cycleLines, ...
                'EdgeColor', 'none', 'FontSize', 9, 'BackgroundColor', [1 1 1 0.7], 'FitBoxToText', 'on');
     makeDraggable(tb2);
 
-    tb3 = annotation('textbox', [0.38, 0.01, 0.15, 0.05], 'String', totalCycleLines, ...
+    tb3 = annotation('textbox', [0.17, 0.01, 0.15, 0.05], 'String', totalCycleLines, ...
                'EdgeColor', 'none', 'FontSize', 9, 'BackgroundColor', [1 1 1 0.7], 'FitBoxToText', 'on');
     makeDraggable(tb3);
+
+    tb1 = annotation('textbox', [0.33, 0.01, 0.20, 0.05], 'String', txt1, ...
+               'EdgeColor', 'none', 'FontSize', 9, 'BackgroundColor', [1 1 1 0.7], 'FitBoxToText', 'on');
+    makeDraggable(tb1);
 catch ME
     disp('Could not add cycle annotation: ' + string(ME.message));
 end
@@ -691,7 +692,7 @@ yyaxis left; ax.YColor = '#0072BD'; hold on;
 pVab = plot(t, vab, '-', 'Color', vabColor, 'LineWidth', ${graphConfig.lineWidths[0]});
 pVbc = plot(t, vbc, '-', 'Color', vbcColor, 'LineWidth', ${graphConfig.lineWidths[1]});
 pVca = plot(t, vca, '-', 'Color', vcaColor, 'LineWidth', ${graphConfig.lineWidths[2]});
-ylabel('V (kV)');
+ylabel('V (kV)'); ylim([20, 25.6]);
 if ${graphConfig.showGrid ? 'true' : 'false'}, grid on; end
 
 yyaxis right; ax.YColor = '#D95319'; hold on;
