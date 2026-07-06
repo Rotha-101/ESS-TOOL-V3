@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Activity, FileSpreadsheet, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { getDBItem, setDBItem, removeDBItem } from '../lib/db';
 import {
   HC_CATS,
   hcAcceptFiles,
@@ -25,6 +26,17 @@ export function ValidationDebug({ progress, setProgress }: { progress: { pct: nu
   const [pendingFiles, setPendingFiles] = useState<{file: File, path: string}[]>([]);
   const [elapsedTime, setElapsedTime] = useState(0);
   const startTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const saved = await getDBItem<{name: string, size: string}[]>(`validation_log_${project}`);
+      if (saved && saved.length > 0) {
+        setUploadedFiles(saved);
+      } else {
+        setUploadedFiles([]);
+      }
+    })();
+  }, [project]);
 
   
   const handlePlantUpload = (plantId: string | null, type: 'file' | 'folder') => {
@@ -121,6 +133,7 @@ export function ValidationDebug({ progress, setProgress }: { progress: { pct: nu
       });
     }
     setUploadedFiles(filesList);
+    setDBItem(`validation_log_${project}`, filesList);
     setPendingFiles(filesArray);
     
     setUploadMessage('Files dropped successfully! Click RUN to start audit.');
@@ -156,6 +169,8 @@ export function ValidationDebug({ progress, setProgress }: { progress: { pct: nu
             onClick={() => {
               if (confirm('Are you sure you want to clear data for all plants?')) {
                 currentPlants.forEach((plant: any) => hcClearPlantData(plant.id, true));
+                removeDBItem(`validation_log_${project}`);
+                setUploadedFiles([]);
               }
             }}
           >

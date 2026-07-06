@@ -4,10 +4,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, BarChart3, Database, Download, FileSpreadsheet, Trash2, Upload, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { getDBItem, setDBItem, removeDBItem } from '../lib/db';
 import { buildPlantCycleTableJs, getMockDailyResults, parseCycleExcelFile, type DailyResult, type ESSRow } from '../lib/cycle-utils';
 import { getFilesFromDataTransfer } from '../lib/file-utils';
 import { expandZip, extractDataDate, hcByProject } from '../lib/audit-engine.js';
 import { PlantDetailTable } from './PlantDetailTable';
+import { getProjectPlants } from '../lib/project-utils';
 
 const XLSX = (window as any).XLSX;
 
@@ -31,21 +33,16 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
 
   // Load persisted history on mount and on project switch
   useEffect(() => {
-    const stored = localStorage.getItem(`cycle_history_${project}`);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
+    (async () => {
+      const parsed = await getDBItem<any[]>(`cycle_history_${project}`);
+      if (parsed) {
         setDailyResults(parsed);
         if (parsed.length > 0) setSelectedDayIdx(parsed.length - 1);
-        else setSelectedDayIdx(0);
-      } catch (e) {
+      } else {
         setDailyResults([]);
         setSelectedDayIdx(0);
       }
-    } else {
-      setDailyResults([]);
-      setSelectedDayIdx(0);
-    }
+    })();
     
     // Clear out queued files when switching projects
     setYesterdayFiles([]);
@@ -117,7 +114,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
         let SPPC2_SACU: number[] = [];
         let SPPC3_SACU: number[] = [];
         
-        if (project === 'SNTL400') {
+        if (getProjectPlants(project).length === 2) {
           SPPC1_SACU = [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 19, 20, 23];
           SPPC2_SACU = [7, 11, 13, 14, 15, 16, 17, 21, 22, 24, 25];
         } else if (project === 'SNTL600') {
@@ -164,13 +161,8 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
       
       // Load existing history to combine with new data
       let combinedResults: DailyResult[] = [];
-      const stored = localStorage.getItem(`cycle_history_${project}`);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) combinedResults = parsed;
-        } catch (e) {}
-      }
+      const parsed = await getDBItem<any[]>(`cycle_history_${project}`);
+      if (parsed && Array.isArray(parsed)) combinedResults = parsed;
       
       // Update or append new results
       for (const newResult of results) {
@@ -208,8 +200,9 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
         const validP2 = cur.p2Blocks ? cur.p2Blocks.filter(b => b.LastEquivalentNumberOfCycle !== null && !isNaN(b.LastEquivalentNumberOfCycle)) : [];
         const validP3 = cur.p3Blocks ? cur.p3Blocks.filter(b => b.LastEquivalentNumberOfCycle !== null && !isNaN(b.LastEquivalentNumberOfCycle)) : [];
         
-        let allValid = [...validP1, ...validP2];
-        if (project !== 'SNTL400') allValid = [...allValid, ...validP3];
+        let allValid = [...validP1];
+        if (getProjectPlants(project).length >= 2) allValid = [...allValid, ...validP2];
+        if (getProjectPlants(project).length >= 3) allValid = [...allValid, ...validP3];
         
         if (allValid.length > 0) {
           cur.Average_Total_Plant_Cycle = allValid.reduce((s, b) => s + b.LastEquivalentNumberOfCycle, 0) / allValid.length;
@@ -220,13 +213,13 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
         let sumD = 0;
         let countD = 0;
         if (cur.SWG01_DailyReached !== null) { sumD += cur.SWG01_DailyReached * validP1.length; countD += validP1.length; }
-        if (cur.SWG02_DailyReached !== null) { sumD += cur.SWG02_DailyReached * validP2.length; countD += validP2.length; }
-        if (project !== 'SNTL400' && cur.SWG03_DailyReached !== null) { sumD += cur.SWG03_DailyReached * validP3.length; countD += validP3.length; }
+        if (getProjectPlants(project).length >= 2 && cur.SWG02_DailyReached !== null) { sumD += cur.SWG02_DailyReached * validP2.length; countD += validP2.length; }
+        if (getProjectPlants(project).length >= 3 && cur.SWG03_DailyReached !== null) { sumD += cur.SWG03_DailyReached * validP3.length; countD += validP3.length; }
         
         cur.Average_Daily_Cycle = countD > 0 ? sumD / countD : null;
       }
       
-      localStorage.setItem(`cycle_history_${project}`, JSON.stringify(combinedResults));
+      await setDBItem(`cycle_history_${project}`, combinedResults);
       setDailyResults(combinedResults);
       setSelectedDayIdx(combinedResults.length - 1);
       setCalcStatus(`Successfully processed and accumulated ${combinedResults.length} days of data!`);
@@ -241,7 +234,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
 
   const handleClearHistory = () => {
     if (!confirm('Are you sure you want to clear the entire cycle calculation history for this project? This cannot be undone.')) return;
-    localStorage.removeItem(`cycle_history_${project}`);
+    removeDBItem(`cycle_history_${project}`);
     setDailyResults([]);
     setSelectedDayIdx(0);
     setCalcStatus('Cycle history cleared.');
@@ -306,9 +299,11 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
         'DataDate': r.DataDate,
         'SWG01_TotalCycle': r.SWG01_TotalCycle === null || isNaN(r.SWG01_TotalCycle) ? '' : Number(r.SWG01_TotalCycle.toFixed(4)),
         'SWG01_DailyReached': r.SWG01_DailyReached === null || isNaN(r.SWG01_DailyReached) ? '' : Number(r.SWG01_DailyReached.toFixed(4)),
-        'SWG02_TotalCycle': r.SWG02_TotalCycle === null || isNaN(r.SWG02_TotalCycle) ? '' : Number(r.SWG02_TotalCycle.toFixed(4)),
-        'SWG02_DailyReached': r.SWG02_DailyReached === null || isNaN(r.SWG02_DailyReached) ? '' : Number(r.SWG02_DailyReached.toFixed(4)),
-        ...(project !== 'SNTL400' ? {
+        ...(getProjectPlants(project).length >= 2 ? {
+          'SWG02_TotalCycle': r.SWG02_TotalCycle === null || isNaN(r.SWG02_TotalCycle) ? '' : Number(r.SWG02_TotalCycle.toFixed(4)),
+          'SWG02_DailyReached': r.SWG02_DailyReached === null || isNaN(r.SWG02_DailyReached) ? '' : Number(r.SWG02_DailyReached.toFixed(4)),
+        } : {}),
+        ...(getProjectPlants(project).length >= 3 ? {
           'SWG03_TotalCycle': r.SWG03_TotalCycle === null || isNaN(r.SWG03_TotalCycle) ? '' : Number(r.SWG03_TotalCycle.toFixed(4)),
           'SWG03_DailyReached': r.SWG03_DailyReached === null || isNaN(r.SWG03_DailyReached) ? '' : Number(r.SWG03_DailyReached.toFixed(4))
         } : {}),
@@ -329,10 +324,9 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
           ['PlantName', 'DeviceName', 'ESS_Number', 'LastEquivalentNumberOfCycle', 'AverageCycleOfBlock', 'AverageCycleOfSPPC']
         ];
         
-        const allBlocks = [...(r.p1Blocks || []), ...(r.p2Blocks || [])];
-        if (project !== 'SNTL400') {
-          allBlocks.push(...(r.p3Blocks || []));
-        }
+        const allBlocks = [...(r.p1Blocks || [])];
+        if (getProjectPlants(project).length >= 2) allBlocks.push(...(r.p2Blocks || []));
+        if (getProjectPlants(project).length >= 3) allBlocks.push(...(r.p3Blocks || []));
         
         for (const b of allBlocks) {
           aoa.push([
@@ -381,7 +375,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
 
   const fontColor = theme === 'dark' ? '#E0E0E0' : '#111827';
   const gridColor = theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
-  const projectBlockCount = project === 'SNTL400' ? 24 : (isBessProject ? 'Total' : 37);
+  const projectBlockCount = getProjectPlants(project).length === 2 ? 24 : (isBessProject ? 'Total' : 37);
 
   const formatCycleMetric = (value: number | null | undefined, signed = false) => {
     if (value === null || value === undefined || Number.isNaN(value)) {
@@ -626,7 +620,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
               <span>Processed Datasets ({dailyResults.length} Days)</span>
               <button 
                 onClick={() => {
-                  localStorage.removeItem(`cycle_history_${project}`);
+                  removeDBItem(`cycle_history_${project}`);
                   setDailyResults([]);
                   setSelectedDayIdx(0);
                   setCalcStatus('History cleared.');
@@ -657,7 +651,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                           const newResults = [...dailyResults];
                           newResults.splice(idx, 1);
                           setDailyResults(newResults);
-                          localStorage.setItem(`cycle_history_${project}`, JSON.stringify(newResults));
+                          setDBItem(`cycle_history_${project}`, newResults);
                           if (selectedDayIdx >= idx && selectedDayIdx > 0) {
                             setSelectedDayIdx(selectedDayIdx - 1);
                           }
@@ -677,7 +671,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                   <div className="grid grid-cols-2 gap-1 text-[8px] text-foreground/45 border-t border-border-v/20 pt-1.5">
                     <div>P1 Avg: <span className="font-bold text-foreground/75 font-mono">{r.SWG01_TotalCycle !== null ? r.SWG01_TotalCycle.toFixed(2) : '---'}</span></div>
                     <div>P2 Avg: <span className="font-bold text-foreground/75 font-mono">{r.SWG02_TotalCycle !== null ? r.SWG02_TotalCycle.toFixed(2) : '---'}</span></div>
-                    {project !== 'SNTL400' && (
+                    {getProjectPlants(project).length >= 3 && (
                       <div className="col-span-2">P3 Avg: <span className="font-bold text-foreground/75 font-mono">{r.SWG03_TotalCycle !== null ? r.SWG03_TotalCycle.toFixed(2) : '---'}</span></div>
                     )}
                   </div>
@@ -693,14 +687,14 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
           {selectedDay && (
             <div className={cn(
               "grid gap-4 w-full shrink-0",
-              project === 'SNTL400' ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-3"
+              getProjectPlants(project).length === 2 ? "grid-cols-1 md:grid-cols-2" : getProjectPlants(project).length >= 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1"
             )}>
               {/* Plant 1 Card */}
               <div className="bg-surface border border-border-v rounded-md p-3.5 flex flex-col justify-between relative overflow-hidden shadow-sm hover:border-accent-blue/30 transition-all">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-accent-blue/5 rounded-full blur-2xl pointer-events-none"></div>
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-foreground/45 text-[9px] uppercase tracking-widest font-mono">SWG01 (Plant 01)</span>
-                  <span className="text-[10px] font-mono font-bold text-green-500">{project === 'SNTL400' ? 13 : (isBessProject ? 'Total' : 16)} SACU Blocks</span>
+                  <span className="text-[10px] font-mono font-bold text-green-500">{getProjectPlants(project).length === 2 ? 13 : (isBessProject ? 'Total' : 16)} SACU Blocks</span>
                 </div>
                 <div className="flex items-baseline justify-between mt-1">
                   <span className="text-2xl font-mono font-bold text-foreground/90">
@@ -725,7 +719,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                   <div className="absolute top-0 right-0 w-24 h-24 bg-accent-blue/5 rounded-full blur-2xl pointer-events-none"></div>
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-foreground/45 text-[9px] uppercase tracking-widest font-mono">SWG02 (Plant 02)</span>
-                    <span className="text-[10px] font-mono font-bold text-green-500">{project === 'SNTL400' ? 11 : 10} SACU Blocks</span>
+                    <span className="text-[10px] font-mono font-bold text-green-500">{getProjectPlants(project).length === 2 ? 11 : 10} SACU Blocks</span>
                   </div>
                   <div className="flex items-baseline justify-between mt-1">
                     <span className="text-2xl font-mono font-bold text-foreground/90">
@@ -746,7 +740,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
               )}
 
               {/* Plant 3 Card (Hidden for SNTL400!) */}
-              {!isBessProject && project !== 'SNTL400' && (
+              {getProjectPlants(project).length >= 3 && (
                 <div className="bg-surface border border-border-v rounded-md p-3.5 flex flex-col justify-between relative overflow-hidden shadow-sm hover:border-accent-blue/30 transition-all">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-accent-blue/5 rounded-full blur-2xl pointer-events-none"></div>
                   <div className="flex justify-between items-center mb-1">
@@ -813,7 +807,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                     SWG02 (Plant 02)
                   </button>
                 )}
-                {!isBessProject && project !== 'SNTL400' && (
+                {getProjectPlants(project).length >= 3 && (
                   <button
                     onClick={() => setActivePlantTab('p3')}
                     className={cn(
@@ -852,7 +846,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                             <th className="py-2 px-3 font-semibold text-right text-green-400">P2 Daily Reached</th>
                           </>
                         )}
-                        {!isBessProject && project !== 'SNTL400' && (
+                        {getProjectPlants(project).length >= 3 && (
                           <>
                             <th className="py-2 px-3 font-semibold text-right">P3 Avg Total</th>
                             <th className="py-2 px-3 font-semibold text-right text-green-400">P3 Daily Reached</th>
@@ -875,7 +869,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                               <td className="py-2 px-3 text-right text-green-400 font-bold">{r.SWG02_DailyReached !== null ? `+${r.SWG02_DailyReached.toFixed(4)}` : '---'}</td>
                             </>
                           )}
-                          {!isBessProject && project !== 'SNTL400' && (
+                          {getProjectPlants(project).length >= 3 && (
                             <>
                               <td className="py-2 px-3 text-right">{r.SWG03_TotalCycle !== null ? r.SWG03_TotalCycle.toFixed(4) : '---'}</td>
                               <td className="py-2 px-3 text-right text-green-400 font-bold">{r.SWG03_DailyReached !== null ? `+${r.SWG03_DailyReached.toFixed(4)}` : '---'}</td>
@@ -897,7 +891,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                   <PlantDetailTable blocks={selectedDay.p2Blocks} />
                 )}
 
-                {!isBessProject && activePlantTab === 'p3' && project !== 'SNTL400' && (
+                {!isBessProject && activePlantTab === 'p3' && getProjectPlants(project).length >= 3 && (
                   <PlantDetailTable blocks={selectedDay.p3Blocks} />
                 )}
               </div>
@@ -923,27 +917,27 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
           {selectedDay && (
             <div className={cn(
               "grid gap-4 w-full shrink-0",
-              project === 'SNTL400' ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-3"
+              getProjectPlants(project).length === 2 ? "grid-cols-1 md:grid-cols-2" : getProjectPlants(project).length >= 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1"
             )}>
               {renderCycleSummaryCard({
                 title: 'SPPC 1',
-                blockLabel: `${project === 'SNTL400' ? 13 : (isBessProject ? 'Total' : 16)} SACU Blocks`,
+                blockLabel: `${getProjectPlants(project).length === 2 ? 13 : (isBessProject ? 'Total' : 16)} SACU Blocks`,
                 totalYesterday: previousDay?.SWG01_TotalCycle,
                 yesterdayCycle: previousDay?.SWG01_DailyReached,
                 totalToday: selectedDay.SWG01_TotalCycle,
                 todayCycle: selectedDay.SWG01_DailyReached,
               })}
 
-              {!isBessProject && renderCycleSummaryCard({
+              {getProjectPlants(project).length >= 2 && renderCycleSummaryCard({
                 title: 'SPPC 2',
-                blockLabel: `${project === 'SNTL400' ? 11 : 10} SACU Blocks`,
+                blockLabel: `${getProjectPlants(project).length === 2 ? 11 : 10} SACU Blocks`,
                 totalYesterday: previousDay?.SWG02_TotalCycle,
                 yesterdayCycle: previousDay?.SWG02_DailyReached,
                 totalToday: selectedDay.SWG02_TotalCycle,
                 todayCycle: selectedDay.SWG02_DailyReached,
               })}
 
-              {!isBessProject && project !== 'SNTL400' && (
+              {getProjectPlants(project).length >= 3 && (
                 renderCycleSummaryCard({
                   title: 'SPPC 3',
                   blockLabel: '11 SACU Blocks',
@@ -986,7 +980,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                         line: { color: '#22C55E', width: 2, shape: 'spline' as const },
                         marker: { size: 6 }
                       }]),
-                      ...(!isBessProject && project !== 'SNTL400' ? [{
+                      ...(getProjectPlants(project).length >= 3 ? [{
                         x: chartDataDates,
                         y: chartP3Total,
                         type: 'scatter' as const,
@@ -1039,8 +1033,8 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                     const todayP2 = selectedDay?.SWG02_TotalCycle || 0;
                     const todayP3 = selectedDay?.SWG03_TotalCycle || 0;
 
-                    const yDataYest = isBessProject ? [yestP1] : project === 'SNTL400' ? [yestP1, yestP2] : [yestP1, yestP2, yestP3];
-                    const yDataToday = isBessProject ? [todayP1] : project === 'SNTL400' ? [todayP1, todayP2] : [todayP1, todayP2, todayP3];
+                    const yDataYest = isBessProject ? [yestP1] : getProjectPlants(project).length === 2 ? [yestP1, yestP2] : [yestP1, yestP2, yestP3];
+                    const yDataToday = isBessProject ? [todayP1] : getProjectPlants(project).length === 2 ? [todayP1, todayP2] : [todayP1, todayP2, todayP3];
                     
                     const allVals = [...yDataYest, ...yDataToday].filter(v => v > 0);
                     const minY = allVals.length > 0 ? Math.min(...allVals) : 0;
@@ -1050,14 +1044,14 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                       <Plot
                         data={[
                           {
-                            x: isBessProject ? ['SPPC 1'] : project === 'SNTL400' ? ['SPPC 1', 'SPPC 2'] : ['SPPC 1', 'SPPC 2', 'SPPC 3'],
+                            x: isBessProject ? ['SPPC 1'] : getProjectPlants(project).length === 2 ? ['SPPC 1', 'SPPC 2'] : ['SPPC 1', 'SPPC 2', 'SPPC 3'],
                             y: yDataYest,
                             type: 'bar',
                             name: 'Yesterday',
                             marker: { color: '#8B5CF6', opacity: 0.85 }
                           },
                           {
-                            x: isBessProject ? ['SPPC 1'] : project === 'SNTL400' ? ['SPPC 1', 'SPPC 2'] : ['SPPC 1', 'SPPC 2', 'SPPC 3'],
+                            x: isBessProject ? ['SPPC 1'] : getProjectPlants(project).length === 2 ? ['SPPC 1', 'SPPC 2'] : ['SPPC 1', 'SPPC 2', 'SPPC 3'],
                             y: yDataToday,
                             type: 'bar',
                             name: 'Today',

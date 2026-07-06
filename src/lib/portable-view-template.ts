@@ -1,3 +1,4 @@
+import { getProjectPlants } from './project-utils';
 export function generatePortableViewHtml(
   project: string,
   evalData: any,
@@ -77,25 +78,27 @@ export function generatePortableViewHtml(
       </button>
       <span class="text-gray-500 dark:text-gray-400">ACTIVE GRAPH:</span>
       <select id="select-active-metric" onchange="changeMetric(this.value)" class="h-6 bg-gray-100 dark:bg-[#0F172A] border border-gray-300 dark:border-gray-700 rounded px-1.5 text-[10px] text-gray-900 dark:text-white focus:outline-none focus:border-accentBlue font-bold font-mono">
-        ${project === 'SNTL400' ? `
-          <option value="pf_p1">Figure 1: SWG01 Powerflow Check</option>
-          <option value="pf_p2">Figure 2: SWG02 Powerflow Check</option>
-          <option value="fig5">Figure 3: Active Power & SOC All Plants</option>
-          <option value="fig6">Figure 4: Volt & Reactive Power All Plants</option>
-        ` : project === 'SNTL600' ? `
-          <option value="pf_p1">Figure 1: SWG01 Powerflow Check</option>
-          <option value="pf_p2">Figure 2: SWG02 Powerflow Check</option>
-          <option value="pf_p3">Figure 3: SWG03 Powerflow Check</option>
-          <option value="fig5">Figure 4: Active Power & SOC All Plants</option>
-          <option value="fig6">Figure 5: Volt & Reactive Power All Plants</option>
-        ` : `
+        ${(() => {
+          const p = getProjectPlants(project);
+          const isBess = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
+          if (isBess) {
+            return `
           <option value="f_p">Figure 1: Freq & Active Power</option>
           <option value="soc_p">Figure 2: SOC & Active Power</option>
           <option value="v_q">Figure 3: Volt & Reactive Power</option>
           <option value="fig4">Figure 4: Powerflow Check</option>
           <option value="fig5">Figure 5: Active Power & SOC All Plants</option>
           <option value="fig6">Figure 6: Volt & Reactive Power All Plants</option>
-        `}
+            `;
+          }
+          let html = '';
+          p.forEach((pk, i) => {
+            html += `          <option value="pf_p${i + 1}">Figure ${i + 1}: SWG0${i + 1} Powerflow Check</option>\n`;
+          });
+          html += `          <option value="fig5">Figure ${p.length + 1}: Active Power & SOC All Plants</option>\n`;
+          html += `          <option value="fig6">Figure ${p.length + 2}: Volt & Reactive Power All Plants</option>\n`;
+          return html;
+        })()}
       </select>
       <!-- Theme Switcher Button -->
       <button id="theme-toggle" onclick="toggleTheme()" class="p-1.5 rounded-lg border border-gray-300 dark:border-borderV hover:bg-gray-100 dark:hover:bg-white/5 transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white flex items-center justify-center cursor-pointer mr-2" title="Toggle theme">
@@ -977,9 +980,11 @@ export function generatePortableViewHtml(
         toImageButtonOptions: { format: 'png', filename: 'plot_export', scale: 2 }
       };
 
-      const hasPlant3 = project !== 'SNTL400';
-      const plants = ['plant1', 'plant2'];
-      if (hasPlant3) plants.push('plant3');
+      const plants = ${JSON.stringify(getProjectPlants(project))};
+      const hasPlant2 = plants.includes('plant2');
+      const hasPlant3 = plants.includes('plant3');
+      const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : ((evalDataRaw.dailyCycle?.plant1 || 0) + (hasPlant2 ? evalDataRaw.dailyCycle?.plant2 || 0 : 0) + (hasPlant3 ? evalDataRaw.dailyCycle?.plant3 || 0 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1));
+      const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : ((evalDataRaw.totalCycle?.plant1 || 0) + (hasPlant2 ? evalDataRaw.totalCycle?.plant2 || 0 : 0) + (hasPlant3 ? evalDataRaw.totalCycle?.plant3 || 0 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1));
 
       const drawPanelTitle = (pk) => {
         return pk === 'plant1' ? 'SWG01 (Plant 01)' : pk === 'plant2' ? 'SWG02 (Plant 02)' : 'SWG03 (Plant 03)';
@@ -1006,7 +1011,7 @@ export function generatePortableViewHtml(
 
           const traces = [
             applyTrace({ y: (evalDataRaw.pTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'P total', line: { color: '#0072BD', width: 2 } }, 0),
-            applyTrace({ y: (evalDataRaw.cmdP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'P command from NCC' : 'P command from NCC (No Data)', line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: (evalDataRaw.cmdP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'P command from NCC' : 'P command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdP?.[pk] || []) || []).some(v => v != null && !isNaN(v))), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
             applyTrace({ y: (evalDataRaw.remoteP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.remoteP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'Remote Active Power' : 'Remote Active Power (No Data)', line: { color: '#731A66', width: 1.6 } }, 2),
             applyTrace({ y: (evalDataRaw.soc?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 2 } }, 3)
           ];
@@ -1024,7 +1029,7 @@ export function generatePortableViewHtml(
             applyTrace({ y: (evalDataRaw.vbc?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Vbc', line: { color: '#77AC30', width: 1.2 } }, 1),
             applyTrace({ y: (evalDataRaw.vca?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Vca', line: { color: '#7E2F8E', width: 1.2 } }, 2),
             applyTrace({ y: (evalDataRaw.qTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdQ?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'Q command from NCC' : 'Q command from NCC (No Data)', yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4)
+            applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v)) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v))), yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv', dash: 'dot' } }, 4)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', centeredYLim([(evalDataRaw.qTotal?.[pk] || []), (evalDataRaw.cmdQ?.[pk] || []), evalDataRaw.qBess && (evalDataRaw.qBess?.[pk] || [])], 0), [20, 24], 'v_q_' + pk);
           createPlotWithEvents(div, traces, layout, 'v_q_' + pk);
@@ -1056,7 +1061,7 @@ export function generatePortableViewHtml(
         containerDiv.appendChild(div2);
         createPlotWithEvents(div2, [
           applyTrace({ y: (evalDataRaw.pTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'P total', line: { color: '#0072BD', width: 1.2 } }, 0),
-          applyTrace({ y: (evalDataRaw.cmdP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'P command from NCC' : 'P command from NCC (No Data)', line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+          applyTrace({ y: (evalDataRaw.cmdP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'P command from NCC' : 'P command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdP?.[pk] || []) || []).some(v => v != null && !isNaN(v))), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
           applyTrace({ y: (evalDataRaw.remoteP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.remoteP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'Remote Active Power' : 'Remote Active Power (No Data)', line: { color: '#731A66', width: 1.6 } }, 2),
           applyTrace({ y: (evalDataRaw.soc?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
         ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', [0, 100], centeredYLim([(evalDataRaw.pTotal?.[pk] || []), evalDataRaw.remP && (evalDataRaw.remP?.[pk] || [])], 0), activeMetric + '_soc_' + pk), activeMetric + '_soc_' + pk);
@@ -1069,15 +1074,10 @@ export function generatePortableViewHtml(
           applyTrace({ y: (evalDataRaw.vbc?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Vbc', line: { color: '#77AC30', width: 1.2 } }, 1),
           applyTrace({ y: (evalDataRaw.vca?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Vca', line: { color: '#7E2F8E', width: 1.2 } }, 2),
           applyTrace({ y: (evalDataRaw.qTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-          applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdQ?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'Q command from NCC' : 'Q command from NCC (No Data)', yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+          applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v)) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v))), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4)
         ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', centeredYLim([(evalDataRaw.qTotal?.[pk] || []), (evalDataRaw.cmdQ?.[pk] || []), evalDataRaw.qBess && (evalDataRaw.qBess?.[pk] || [])], 0), [20, 24], activeMetric + '_vq_' + pk), activeMetric + '_vq_' + pk);
       } else if (activeMetric === 'fig4') {
-        const hasPlant2 = (evalDataRaw.pTotal.plant2 && (evalDataRaw.pTotal.plant2 || []).some(v => !isNaN(v))) || (evalDataRaw.soc.plant2 && (evalDataRaw.soc.plant2 || []).some(v => !isNaN(v)));
         const isBessProject = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
-        const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalDataRaw.soc.plant3 && (evalDataRaw.soc.plant3 || []).some(v => !isNaN(v));
-        
-        const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : ((evalDataRaw.dailyCycle.plant1 + (hasPlant2 ? evalDataRaw.dailyCycle.plant2 : 0) + (hasPlant3 ? evalDataRaw.dailyCycle.plant3 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1)));
-        const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : ((evalDataRaw.totalCycle.plant1 + (hasPlant2 ? evalDataRaw.totalCycle.plant2 : 0) + (hasPlant3 ? evalDataRaw.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1)));
 
         plants.forEach((pk, statsIndex) => {
           const containerDiv = document.createElement('div');
@@ -1135,7 +1135,7 @@ export function generatePortableViewHtml(
             applyTrace({ y: evalDataRaw.pPccPVS && (evalDataRaw.pPccPVS?.[pk] || []) && ((evalDataRaw.pPccPVS?.[pk] || []) || []).some(v => v != null && !isNaN(v)) ? (evalDataRaw.pPccPVS?.[pk] || []) : (evalDataRaw.pTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
             applyTrace({ y: evalDataRaw.pPV ? (evalDataRaw.pPV?.[pk] || []) : [], type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalDataRaw.pPV && (evalDataRaw.pPV?.[pk] || []) && ((evalDataRaw.pPV?.[pk] || []) || []).some((v) => v != null && !isNaN(v))), line: { color: '#EDB120', width: 2 } }, 10),
             applyTrace({ y: evalDataRaw.pBESS ? (evalDataRaw.pBESS?.[pk] || []) : [], type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalDataRaw.pBESS && (evalDataRaw.pBESS?.[pk] || []) && ((evalDataRaw.pBESS?.[pk] || []) || []).some((v) => v != null && !isNaN(v))), line: { color: '#77AC30', width: 2 } }, 11),
-            applyTrace({ y: (evalDataRaw.cmdP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'P command from NCC' : 'P command from NCC (No Data)', line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: (evalDataRaw.cmdP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'P command from NCC' : 'P command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdP?.[pk] || []) || []).some(v => v != null && !isNaN(v))), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
             applyTrace({ y: (evalDataRaw.remoteP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.remoteP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'Remote Active Power' : 'Remote Active Power (No Data)', line: { color: '#731A66', width: 1.6 } }, 2),
             applyTrace({ y: (evalDataRaw.soc?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 4)
           ], getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', [0, 100], centeredYLim([(evalDataRaw.pTotal?.[pk] || []), evalDataRaw.remP && (evalDataRaw.remP?.[pk] || [])], 0), 'fig4_soc_' + pk), 'fig4_soc_' + pk);
@@ -1148,12 +1148,10 @@ export function generatePortableViewHtml(
             applyTrace({ y: (evalDataRaw.vbc?.[pk] || []) || [], type: 'scattergl', mode: 'lines', name: 'Vbc', line: { color: '#77AC30', width: 1.2 } }, 1),
             applyTrace({ y: (evalDataRaw.vca?.[pk] || []) || [], type: 'scattergl', mode: 'lines', name: 'Vca', line: { color: '#7E2F8E', width: 1.2 } }, 2),
             applyTrace({ y: (evalDataRaw.qTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdQ?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'Q command from NCC' : 'Q command from NCC (No Data)', yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+            applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v)) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v))), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4)
           ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', centeredYLim([(evalDataRaw.qTotal?.[pk] || []), (evalDataRaw.cmdQ?.[pk] || []), evalDataRaw.qBess && (evalDataRaw.qBess?.[pk] || [])], 0), [20, 24], 'fig4_vq_' + pk), 'fig4_vq_' + pk);
         });
       } else if (activeMetric === 'fig5') {
-        const avgDaily = evalDataRaw.avgDailyCycle;
-        const avgTotal = evalDataRaw.avgTotalCycle;
 
         plants.forEach((pk, statsIndex) => {
           const div = document.createElement('div');
@@ -1190,7 +1188,7 @@ export function generatePortableViewHtml(
           const socStats = (evalDataRaw.socStats?.[pk] || {});
           const traces = [
             applyTrace({ y: (evalDataRaw.pTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'P total', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: (evalDataRaw.cmdP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'P command from NCC' : 'P command from NCC (No Data)', line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
+            applyTrace({ y: (evalDataRaw.cmdP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'P command from NCC' : 'P command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdP?.[pk] || []) || []).some(v => v != null && !isNaN(v))), line: { color: '#D95319', width: 1.6, shape: 'hv' } }, 1),
             applyTrace({ y: (evalDataRaw.remoteP?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.remoteP?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? 'Remote Active Power' : 'Remote Active Power (No Data)', line: { color: '#731A66', width: 1.6 } }, 2),
             applyTrace({ y: (evalDataRaw.dispatchP?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'P dispatch allocation', showlegend: Boolean(evalDataRaw?.dispatchP?.[pk]?.some((v) => v != null && !isNaN(v))), line: { color: '#339933', width: 1.8, dash: 'dash' } }, 3),
             applyTrace({ y: (evalDataRaw.soc?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 4)
@@ -1266,7 +1264,7 @@ export function generatePortableViewHtml(
             applyTrace({ y: (evalDataRaw.vbc?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Vbc', line: { color: '#77AC30', width: 1.2 } }, 1),
             applyTrace({ y: (evalDataRaw.vca?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Vca', line: { color: '#7E2F8E', width: 1.2 } }, 2),
             applyTrace({ y: (evalDataRaw.qTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
-            applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'Q command from NCC', yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
+            applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scattergl', mode: 'lines', name: ((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v)) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v))), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4)
           ];
           const layout = getMATLABLayout(drawPanelTitle(pk) + ' | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', centeredYLim([(evalDataRaw.qTotal?.[pk] || []), (evalDataRaw.cmdQ?.[pk] || []), evalDataRaw.qBess && (evalDataRaw.qBess?.[pk] || [])], 0), [20, 24], 'fig6_' + pk);
           createPlotWithEvents(div, traces, layout, 'fig6_' + pk);

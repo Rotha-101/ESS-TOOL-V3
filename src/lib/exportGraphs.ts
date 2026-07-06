@@ -1,4 +1,7 @@
 import { generatePortableViewHtml } from './portable-view-template';
+import { getProjectPlants } from './project-utils';
+
+const is20PercentProject = (proj: string) => typeof proj === 'string' && (proj.startsWith('SNTB') || proj.startsWith('SNTV') || proj.startsWith('SNTD') || proj.startsWith('SNTZ') || proj.startsWith('MSGP'));
 
 export const exportAllGraphsToZip = async (
   project: string,
@@ -9,7 +12,7 @@ export const exportAllGraphsToZip = async (
 ) => {
   if (!evalData || !evalData.timestamps) return;
 
-  const plants = project === 'SNTL400' ? ['plant1', 'plant2'] : ['plant1', 'plant2', 'plant3'];
+  const plants = getProjectPlants(project);
   const win = window as any;
   if (!win.Plotly) {
     console.error('Plotly is not loaded. Cannot export graphs.');
@@ -307,6 +310,24 @@ export const exportAllGraphsToZip = async (
   const allGraphs: { folder: string; name: string; metricId: string; traces: any[]; layout: any; composite?: { title: string, subplots: {traces: any[], layout: any}[] } }[] = [];
 
   const addMetricGraphs = (metric: string, folderName: string) => {
+    const vTitle = is20PercentProject(project) ? 'Vavg (kV)' : 'V (kV)';
+    const getVoltageTraces = (pk: string) => {
+      if (is20PercentProject(project)) {
+        const vab = evalData.vab?.[pk] || [];
+        const vbc = evalData.vbc?.[pk] || [];
+        const vca = evalData.vca?.[pk] || [];
+        const vavg = vab.map((v: number, i: number) => (v + (vbc[i] || v) + (vca[i] || v)) / 3);
+        return [
+          applyTrace({ y: vavg, type: 'scatter', mode: 'lines', name: 'Vavg (kV)', xaxis: 'x', yaxis: 'y', line: { color: '#77AC30', width: 0.8 } }, 0)
+        ];
+      }
+      return [
+        applyTrace({ y: evalData.vab?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vab', xaxis: 'x', yaxis: 'y', line: { color: '#0072BD', width: 1.2 } }, 0),
+        applyTrace({ y: evalData.vbc?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vbc', xaxis: 'x', yaxis: 'y', line: { color: '#77AC30', width: 1.2 } }, 1),
+        applyTrace({ y: evalData.vca?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vca', xaxis: 'x', yaxis: 'y', line: { color: '#7E2F8E', width: 1.2 } }, 2)
+      ];
+    };
+
     if (metric === 'f_p') {
       const subplots: any[] = [];
       plants.forEach(pk => {
@@ -341,13 +362,11 @@ export const exportAllGraphsToZip = async (
         const label = pk === 'plant1' ? 'SWG01' : pk === 'plant2' ? 'SWG02' : 'SWG03';
         subplots.push({
           traces: [
-            applyTrace({ y: evalData.vab?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vab', xaxis: 'x', yaxis: 'y', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalData.vbc?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vbc', xaxis: 'x', yaxis: 'y', line: { color: '#77AC30', width: 1.2 } }, 1),
-            applyTrace({ y: evalData.vca?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vca', xaxis: 'x', yaxis: 'y', line: { color: '#7E2F8E', width: 1.2 } }, 2),
+            ...getVoltageTraces(pk),
             applyTrace({ y: evalData.qTotal?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Q total', xaxis: 'x', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
             applyTrace({ y: evalData.cmdQ?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Q cmd', xaxis: 'x', yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4)
           ],
-          layout: getSubplotLayoutSinglePlant1Row(label + ' (Plant 0' + pk.slice(-1) + ') | Reactive Power & Voltage', 'V (kV)', 'Q (MVar)')
+          layout: getSubplotLayoutSinglePlant1Row(label + ' (Plant 0' + pk.slice(-1) + ') | Reactive Power & Voltage', vTitle, 'Q (MVar)')
         });
       });
       allGraphs.push({ folder: folderName, name: 'Volt & Reactive Power', metricId: 'v_q', traces: [], layout: {}, composite: { title: 'Reactive Power & Voltage All Plants', subplots } });
@@ -379,13 +398,11 @@ export const exportAllGraphsToZip = async (
             },
             {
               traces: [
-                applyTrace({ y: evalData.vab?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vab', xaxis: 'x', yaxis: 'y', line: { color: '#0072BD', width: 1.2 } }, 0),
-                applyTrace({ y: evalData.vbc?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vbc', xaxis: 'x', yaxis: 'y', line: { color: '#77AC30', width: 1.2 } }, 1),
-                applyTrace({ y: evalData.vca?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vca', xaxis: 'x', yaxis: 'y', line: { color: '#7E2F8E', width: 1.2 } }, 2),
+                ...getVoltageTraces(pk),
                 applyTrace({ y: evalData.qTotal?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Q total', xaxis: 'x', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
                 applyTrace({ y: evalData.cmdQ?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Q cmd', xaxis: 'x', yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
               ],
-              layout: getSubplotLayoutSinglePlant1Row('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)')
+              layout: getSubplotLayoutSinglePlant1Row('Reactive Power & Voltage', vTitle, 'Q (MVar)')
             }
           ]
         }
@@ -417,13 +434,11 @@ export const exportAllGraphsToZip = async (
               },
               {
                 traces: [
-                  applyTrace({ y: evalData.vab?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vab', xaxis: 'x', yaxis: 'y', line: { color: '#0072BD', width: 1.2 } }, 0),
-                  applyTrace({ y: evalData.vbc?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vbc', xaxis: 'x', yaxis: 'y', line: { color: '#77AC30', width: 1.2 } }, 1),
-                  applyTrace({ y: evalData.vca?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vca', xaxis: 'x', yaxis: 'y', line: { color: '#7E2F8E', width: 1.2 } }, 2),
+                  ...getVoltageTraces(pk),
                   applyTrace({ y: evalData.qTotal?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Q total', xaxis: 'x', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
                   applyTrace({ y: evalData.cmdQ?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Q cmd', xaxis: 'x', yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv' } }, 4)
                 ],
-                layout: getSubplotLayoutSinglePlant1Row('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)')
+                layout: getSubplotLayoutSinglePlant1Row('Reactive Power & Voltage', vTitle, 'Q (MVar)')
               }
             ]
           }
@@ -450,37 +465,32 @@ export const exportAllGraphsToZip = async (
         const label = pk === 'plant1' ? 'SWG01' : pk === 'plant2' ? 'SWG02' : 'SWG03';
         subplots.push({
           traces: [
-            applyTrace({ y: evalData.vab?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vab', xaxis: 'x', yaxis: 'y', line: { color: '#0072BD', width: 1.2 } }, 0),
-            applyTrace({ y: evalData.vbc?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vbc', xaxis: 'x', yaxis: 'y', line: { color: '#77AC30', width: 1.2 } }, 1),
-            applyTrace({ y: evalData.vca?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Vca', xaxis: 'x', yaxis: 'y', line: { color: '#7E2F8E', width: 1.2 } }, 2),
+            ...getVoltageTraces(pk),
             applyTrace({ y: evalData.qTotal?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Q total', xaxis: 'x', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
             applyTrace({ y: evalData.cmdQ?.[pk] || [], type: 'scatter', mode: 'lines', name: 'Q cmd', xaxis: 'x', yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv' } }, 4)
           ],
-          layout: getSubplotLayoutSinglePlant1Row(label + ' (Plant 0' + pk.slice(-1) + ')', 'V (kV)', 'Q (MVar)')
+          layout: getSubplotLayoutSinglePlant1Row(label + ' (Plant 0' + pk.slice(-1) + ')', vTitle, 'Q (MVar)')
         });
       });
       allGraphs.push({ folder: folderName, name: 'Volt & Reactive Power', metricId: 'fig6', traces: [], layout: {}, composite: { title: 'Volt & Reactive Power (All Plants)', subplots } });
     }
   };
+  const p = getProjectPlants(project);
+  const isBess = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
 
-  if (project === 'SNTL400') {
-    addMetricGraphs('pf_p1', 'Figure 1 - SWG01 Powerflow Check');
-    addMetricGraphs('pf_p2', 'Figure 2 - SWG02 Powerflow Check');
-    addMetricGraphs('fig5', 'Figure 3 - Active Power & SOC');
-    addMetricGraphs('fig6', 'Figure 4 - Volt & Reactive Power');
-  } else if (project === 'SNTL600') {
-    addMetricGraphs('pf_p1', 'Figure 1 - SWG01 Powerflow Check');
-    addMetricGraphs('pf_p2', 'Figure 2 - SWG02 Powerflow Check');
-    addMetricGraphs('pf_p3', 'Figure 3 - SWG03 Powerflow Check');
-    addMetricGraphs('fig5', 'Figure 4 - Active Power & SOC');
-    addMetricGraphs('fig6', 'Figure 5 - Volt & Reactive Power');
-  } else {
+  if (isBess) {
     addMetricGraphs('f_p', 'Figure 1 - Freq & Active Power');
     addMetricGraphs('soc_p', 'Figure 2 - SOC & Active Power');
     addMetricGraphs('v_q', 'Figure 3 - Volt & Reactive Power');
     addMetricGraphs('fig4', 'Figure 4 - Powerflow Check');
     addMetricGraphs('fig5', 'Figure 5 - Active Power & SOC');
     addMetricGraphs('fig6', 'Figure 6 - Volt & Reactive Power');
+  } else {
+    p.forEach((pk, i) => {
+      addMetricGraphs(`pf_p${i+1}`, `Figure ${i+1} - SWG0${i+1} Powerflow Check`);
+    });
+    addMetricGraphs('fig5', `Figure ${p.length + 1} - Active Power & SOC`);
+    addMetricGraphs('fig6', `Figure ${p.length + 2} - Volt & Reactive Power`);
   }
 
   const total = allGraphs.length;
@@ -505,17 +515,9 @@ export const exportAllGraphsToZip = async (
     const htmlStr = generatePortableViewHtml(project, evalData, graphConfig, g.metricId, selectedPlant, []);
     const folderPrefix = baseFolder ? `${baseFolder}/` : 'Graphs/';
     zipEntries.push({
-      name: `${folderPrefix}${g.folder}/Interactive/${prefix}${safeName}.html`,
+      name: `${folderPrefix}${g.folder}/${prefix}${safeName}.html`,
       data: new TextEncoder().encode(htmlStr)
     });
-
-    const pngData = await renderGraphToPng(g.traces, g.layout, offscreenDiv, g.composite);
-    if (pngData) {
-      zipEntries.push({
-        name: `${folderPrefix}${g.folder}/Images/${prefix}${safeName}.png`,
-        data: pngData
-      });
-    }
 
     await new Promise(r => setTimeout(r, 0));
   }

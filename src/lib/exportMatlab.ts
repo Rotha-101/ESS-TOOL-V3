@@ -1,7 +1,10 @@
+import { getProjectPlants } from './project-utils';
+export const is20PercentProject = (proj: string) => typeof proj === 'string' && (proj.startsWith('SNTB') || proj.startsWith('SNTV') || proj.startsWith('SNTD') || proj.startsWith('SNTZ') || proj.startsWith('MSGP'));
+
 export const generateAllMatlabScripts = (project: string, evalData: any): { name: string; script: string; safeName: string }[] => {
   if (!evalData || !evalData.timestamps) return [];
 
-  const plants = project === 'SNTL400' ? ['plant1', 'plant2'] : ['plant1', 'plant2', 'plant3'];
+  const plants = getProjectPlants(project);
   const allScripts: { name: string; script: string; safeName: string }[] = [];
 
   let graphConfig: any = {
@@ -191,6 +194,20 @@ end
     script += `
 % Extract plant data
 pTotal = data.pTotal.${pk};
+if isfield(data, 'pPccPVS')
+    pPccPVS = data.pPccPVS.${pk};
+    pPV = data.pPV.${pk};
+    pBESS = data.pBESS.${pk};
+else
+    pPccPVS = nan(size(pTotal));
+    pPV = nan(size(pTotal));
+    pBESS = nan(size(pTotal));
+end
+if isfield(data, 'qBess')
+    qBess = data.qBess.${pk};
+else
+    qBess = nan(size(pTotal));
+end
 freq = data.freq.${pk};
 cmdP = data.cmdP.${pk};
 remoteP = data.remoteP.${pk};
@@ -201,11 +218,18 @@ vca = data.vca.${pk};
 qTotal = data.qTotal.${pk};
 cmdQ = data.cmdQ.${pk};
 
+% Determine active power to use
+if any(~isnan(pPccPVS) & abs(pPccPVS) > 0.001)
+    pPlot = pPccPVS;
+else
+    pPlot = pTotal;
+end
+
 % --- Tile 1: Frequency & Active Power ---
 ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD';
-plot(t, pTotal, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
-ylabel('P (MW)'); ylim(centeredYLim(pTotal, P_center_MW, 1.05));
+plot(t, pPlot, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
+ylabel('P (MW)'); ylim(centeredYLim(pPlot, P_center_MW, 1.05));
 if ${graphConfig.showGrid ? 'true' : 'false'}, grid on; end
 
 yyaxis right; ax.YColor = '#D95319';
@@ -218,9 +242,21 @@ formatAxis(ax, t, true);
 % --- Tile 2: SOC & Active Power ---
 ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD'; hold on;
-legH = plot(t, pTotal, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
+legH = plot(t, pPlot, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
 legT = {'P (POC)'};
-yDataAll = pTotal(:);
+yDataAll = pPlot(:);
+
+if any(~isnan(pPV) & abs(pPV) > 0.001)
+    pPVPlot = plot(t, pPV, '-', 'Color', '#EDB120', 'LineWidth', 2);
+    legH(end+1) = pPVPlot; legT{end+1} = 'P (PV) (MW)';
+    yDataAll = [yDataAll; pPV(:)];
+end
+
+if any(~isnan(pBESS) & abs(pBESS) > 0.001)
+    pBESSPlot = plot(t, pBESS, '-', 'Color', '#77AC30', 'LineWidth', 2);
+    legH(end+1) = pBESSPlot; legT{end+1} = 'P (BESS) (MW)';
+    yDataAll = [yDataAll; pBESS(:)];
+end
 
 if any(~isnan(cmdP))
     pCmd = stairs(t, cmdP, 'LineWidth', 1.6, 'Color', cmdColor);
@@ -246,24 +282,34 @@ formatAxis(ax, t, true);
 % --- Tile 3: Reactive Power & Voltage ---
 ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD'; hold on;
-pVab = plot(t, vab, '-', 'Color', vabColor, 'LineWidth', ${graphConfig.lineWidths[0]});
+${is20PercentProject(project) ? `vavg = (vab + vbc + vca) / 3;
+pVavg = plot(t, vavg, '-', 'Color', [0.466 0.674 0.188], 'LineWidth', 0.8);
+ylabel('Vavg (kV)');
+legH3 = pVavg; legT3 = {'Vavg (kV)'};` : `pVab = plot(t, vab, '-', 'Color', vabColor, 'LineWidth', ${graphConfig.lineWidths[0]});
 pVbc = plot(t, vbc, '-', 'Color', vbcColor, 'LineWidth', ${graphConfig.lineWidths[1]});
 pVca = plot(t, vca, '-', 'Color', vcaColor, 'LineWidth', ${graphConfig.lineWidths[2]});
-ylabel('V (kV)'); ylim([20, 24]);
+ylabel('V (kV)');
+legH3 = [pVab, pVbc, pVca]; legT3 = {'Vab', 'Vbc', 'Vca'};`}
 if ${graphConfig.showGrid ? 'true' : 'false'}, grid on; end
 
 yyaxis right; ax.YColor = '#D95319'; hold on;
-legH3 = [pVab, pVbc, pVca]; legT3 = {'Vab', 'Vbc', 'Vca'};
 
 pQ = plot(t, qTotal, '-', 'Color', '#D95319', 'LineWidth', ${graphConfig.lineWidths[3]});
 legH3(end+1) = pQ; legT3{end+1} = 'Q total';
 yDataQ = qTotal(:);
 
+if any(~isnan(qBess) & abs(qBess) > 0.001) & any(~isnan(pBESS) & abs(pBESS) > 0.001)
+    pQBess = plot(t, qBess, '-', 'Color', '#000000', 'LineWidth', 1.4);
+    legH3(end+1) = pQBess; legT3{end+1} = 'Q (BESS) (MVar)';
+    yDataQ = [yDataQ; qBess(:)];
+end
+
 if any(~isnan(cmdQ))
     pCmdQ = stairs(t, cmdQ, 'LineWidth', 1.6, 'Color', cmdQColor, 'LineStyle', '--');
     legH3(end+1) = pCmdQ; legT3{end+1} = 'Q command from NCC';
+    yDataQ = [yDataQ; cmdQ(:)];
 end
-ylabel('Q (MVar)'); ylim([-30, 30]);
+ylabel('Q (MVar)'); ylim(centeredYLim(yDataQ, Q_center_MVar, 1.05));
 title('Reactive Power & Voltage');
 legend(legH3, legT3, 'Location', 'northwest');
 formatAxis(ax, t, true);
@@ -273,9 +319,9 @@ linkaxes(axs, 'x');
 % --- Add Annotations ---
 try
     if isfield(data, 'dataDate')
-        dateStrPrint = string(data.dataDate);
+        dateStrPrint = char(string(data.dataDate));
     else
-        dateStrPrint = "N/A";
+        dateStrPrint = 'N/A';
     end
 
     if isfield(data, 'dailyCycle') && isfield(data.dailyCycle, '${pk}')
@@ -290,11 +336,11 @@ try
     end
 
     if ~isnan(dCyc) || ~isnan(tCyc)
-        strBox = ["Daily cycle (" + dateStrPrint + "):", ...
-                  "  Cycle Plant Avg = " + sprintf('%.3f', dCyc), ...
-                  "", ...
-                  "Total cycle:", ...
-                  "  Total Plant Avg = " + sprintf('%.3f', tCyc)];
+        strBox = {['Daily cycle (', dateStrPrint, '):'], ...
+                  ['  Cycle Plant Avg = ', sprintf('%.3f', dCyc)], ...
+                  '', ...
+                  'Total cycle:', ...
+                  ['  Total Plant Avg = ', sprintf('%.6f', tCyc)]};
         tb = annotation('textbox', [0.22 0.01 0.15 0.05], 'String', strBox, 'BackgroundColor', [1 1 1 0.7], 'EdgeColor', 'none', 'FontSize', 9, 'FitBoxToText', 'on');
         makeDraggable(tb);
     end
@@ -302,8 +348,8 @@ catch ME
     disp('Could not add cycle annotation: ' + string(ME.message));
 end
 
-${commonHelpers}
 ${footerCode(safeName)}
+${commonHelpers}
 `;
     allScripts.push({ name: scriptName, script, safeName });
   };
@@ -322,6 +368,20 @@ ${footerCode(safeName)}
     script += `
 % Extract plant data
 pTotal = data.pTotal.${pk};
+if isfield(data, 'pPccPVS')
+    pPccPVS = data.pPccPVS.${pk};
+    pPV = data.pPV.${pk};
+    pBESS = data.pBESS.${pk};
+else
+    pPccPVS = nan(size(pTotal));
+    pPV = nan(size(pTotal));
+    pBESS = nan(size(pTotal));
+end
+if isfield(data, 'qBess')
+    qBess = data.qBess.${pk};
+else
+    qBess = nan(size(pTotal));
+end
 freq = data.freq.${pk};
 cmdP = data.cmdP.${pk};
 remoteP = data.remoteP.${pk};
@@ -332,11 +392,18 @@ vca = data.vca.${pk};
 qTotal = data.qTotal.${pk};
 cmdQ = data.cmdQ.${pk};
 
+% Determine active power to use
+if any(~isnan(pPccPVS) & abs(pPccPVS) > 0.001)
+    pPlot = pPccPVS;
+else
+    pPlot = pTotal;
+end
+
 % --- Tile 1: Frequency & Active Power ---
 ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD';
-plot(t, pTotal, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
-ylabel('P (MW)'); ylim(centeredYLim(pTotal, P_center_MW, 1.05));
+plot(t, pPlot, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
+ylabel('P (MW)'); ylim(centeredYLim(pPlot, P_center_MW, 1.05));
 if ${graphConfig.showGrid ? 'true' : 'false'}, grid on; end
 
 yyaxis right; ax.YColor = '#D95319';
@@ -349,9 +416,21 @@ formatAxis(ax, t, true);
 % --- Tile 2: SOC & Active Power ---
 ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD'; hold on;
-legH = plot(t, pTotal, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
+legH = plot(t, pPlot, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
 legT = {'P total'};
-yDataAll = pTotal(:);
+yDataAll = pPlot(:);
+
+if any(~isnan(pPV) & abs(pPV) > 0.001)
+    pPVPlot = plot(t, pPV, '-', 'Color', '#EDB120', 'LineWidth', 2);
+    legH(end+1) = pPVPlot; legT{end+1} = 'P (PV) (MW)';
+    yDataAll = [yDataAll; pPV(:)];
+end
+
+if any(~isnan(pBESS) & abs(pBESS) > 0.001)
+    pBESSPlot = plot(t, pBESS, '-', 'Color', '#77AC30', 'LineWidth', 2);
+    legH(end+1) = pBESSPlot; legT{end+1} = 'P (BESS) (MW)';
+    yDataAll = [yDataAll; pBESS(:)];
+end
 
 if any(~isnan(cmdP))
     pCmd = stairs(t, cmdP, 'LineWidth', 1.6, 'Color', cmdColor);
@@ -377,19 +456,27 @@ formatAxis(ax, t, true);
 % --- Tile 3: Reactive Power & Voltage ---
 ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD'; hold on;
-pVab = plot(t, vab, '-', 'Color', vabColor, 'LineWidth', ${graphConfig.lineWidths[0]});
+${is20PercentProject(project) ? `vavg = (vab + vbc + vca) / 3;
+pVavg = plot(t, vavg, '-', 'Color', [0.466 0.674 0.188], 'LineWidth', 0.8);
+ylabel('Vavg (kV)');
+legH3 = pVavg; legT3 = {'Vavg (kV)'};` : `pVab = plot(t, vab, '-', 'Color', vabColor, 'LineWidth', ${graphConfig.lineWidths[0]});
 pVbc = plot(t, vbc, '-', 'Color', vbcColor, 'LineWidth', ${graphConfig.lineWidths[1]});
 pVca = plot(t, vca, '-', 'Color', vcaColor, 'LineWidth', ${graphConfig.lineWidths[2]});
 ylabel('V (kV)');
+legH3 = [pVab, pVbc, pVca]; legT3 = {'Vab', 'Vbc', 'Vca'};`}
 if ${graphConfig.showGrid ? 'true' : 'false'}, grid on; end
 
 yyaxis right; ax.YColor = '#D95319'; hold on;
-legH3 = [pVab, pVbc, pVca];
-legT3 = {'Vab', 'Vbc', 'Vca'};
 
 pQ = plot(t, qTotal, '-', 'Color', '#D95319', 'LineWidth', ${graphConfig.lineWidths[3]});
 legH3(end+1) = pQ; legT3{end+1} = 'Q total';
 yDataQ = qTotal(:);
+
+if any(~isnan(qBess) & abs(qBess) > 0.001) & any(~isnan(pBESS) & abs(pBESS) > 0.001)
+    pQBess = plot(t, qBess, '-', 'Color', '#000000', 'LineWidth', 1.4);
+    legH3(end+1) = pQBess; legT3{end+1} = 'Q (BESS) (MVar)';
+    yDataQ = [yDataQ; qBess(:)];
+end
 
 if any(~isnan(cmdQ))
     pCmdQ = stairs(t, cmdQ, 'LineWidth', 1.6, 'Color', cmdQColor, 'LineStyle', '--');
@@ -402,8 +489,8 @@ legend(legH3, legT3, 'Location', 'northwest');
 formatAxis(ax, t, true);
 
 linkaxes(axs, 'x');
-${commonHelpers}
 ${footerCode(safeName)}
+${commonHelpers}
 `;
     allScripts.push({ name: scriptName, script, safeName });
   };
@@ -423,16 +510,46 @@ SOC_LOW_rng  = [4.9  5.3 ];
     plants.forEach((pk, i) => {
       script += `
 % --- Plant: ${pk} ---
-ax = nexttile; axs = [axs, ax];
+% Extract plant data
 pTotal = data.pTotal.${pk};
+if isfield(data, 'pPccPVS')
+    pPccPVS = data.pPccPVS.${pk};
+    pPV = data.pPV.${pk};
+    pBESS = data.pBESS.${pk};
+else
+    pPccPVS = nan(size(pTotal));
+    pPV = nan(size(pTotal));
+    pBESS = nan(size(pTotal));
+end
+soc = data.soc.${pk};
 cmdP = data.cmdP.${pk};
 remoteP = data.remoteP.${pk};
-soc = data.soc.${pk};
 
+% Determine active power to use
+if any(~isnan(pPccPVS) & abs(pPccPVS) > 0.001)
+    pPlot = pPccPVS;
+else
+    pPlot = pTotal;
+end
+
+% --- Tile 1: Active Power & SOC ---
+ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = '#0072BD'; hold on;
-legH = plot(t, pTotal, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
+legH = plot(t, pPlot, '-', 'Color', '#0072BD', 'LineWidth', ${graphConfig.lineWidths[0]});
 legT = {'P total'};
-yDataAll = pTotal(:);
+yDataAll = pPlot(:);
+
+if any(~isnan(pPV) & abs(pPV) > 0.001)
+    pPVPlot = plot(t, pPV, '-', 'Color', '#EDB120', 'LineWidth', 2);
+    legH(end+1) = pPVPlot; legT{end+1} = 'P (PV) (MW)';
+    yDataAll = [yDataAll; pPV(:)];
+end
+
+if any(~isnan(pBESS) & abs(pBESS) > 0.001)
+    pBESSPlot = plot(t, pBESS, '-', 'Color', '#77AC30', 'LineWidth', 2);
+    legH(end+1) = pBESSPlot; legT{end+1} = 'P (BESS) (MW)';
+    yDataAll = [yDataAll; pBESS(:)];
+end
 
 if any(~isnan(cmdP))
     pCmd = stairs(t, cmdP, 'LineWidth', 1.6, 'Color', cmdColor);
@@ -489,46 +606,46 @@ formatAxis(ax, t, true);
 % --- Add Annotations ---
 try
     if isfield(data, 'deviations')
-        txtHigh = "Max deviation (HIGH SOC): " + string(data.deviations.highSOC.pair) + " = " + string(data.deviations.highSOC.text);
-        txtLow  = "Max deviation (LOW SOC): " + string(data.deviations.lowSOC.pair) + " = " + string(data.deviations.lowSOC.text);
+        txtHigh = ['Max deviation (HIGH SOC): ', char(string(data.deviations.highSOC.pair)), ' = ', char(string(data.deviations.highSOC.text))];
+        txtLow  = ['Max deviation (LOW SOC): ', char(string(data.deviations.lowSOC.pair)), ' = ', char(string(data.deviations.lowSOC.text))];
     else
-        txtHigh = "Max deviation (HIGH SOC): (not enough data)";
-        txtLow  = "Max deviation (LOW SOC): (not enough data)";
+        txtHigh = 'Max deviation (HIGH SOC): (not enough data)';
+        txtLow  = 'Max deviation (LOW SOC): (not enough data)';
     end
 
     if isfield(data, 'dataDate')
-        dateStrPrint = string(data.dataDate);
+        dateStrPrint = char(string(data.dataDate));
     else
-        dateStrPrint = "N/A";
+        dateStrPrint = 'N/A';
     end
 
-    cycleLines = ["Daily cycle (" + dateStrPrint + "):"];
+    cycleLines = {['Daily cycle (', dateStrPrint, '):']};
     sumDaily = 0; countDaily = 0;
 `;
     plants.forEach((pk) => {
       script += `    if isfield(data, 'dailyCycle') && isfield(data.dailyCycle, '${pk}')
         val = data.dailyCycle.${pk};
-        cycleLines(end+1) = "  ${plantNameMap[pk]}: " + sprintf('%.2f', val);
+        cycleLines{end+1} = ['  ${plantNameMap[pk]}: ', sprintf('%.3f', val)];
         sumDaily = sumDaily + val; countDaily = countDaily + 1;
     end\n`;
     });
     script += `
-    if countDaily > 0, cycleLines(end+1) = "  Average: " + sprintf('%.2f', sumDaily/countDaily); end
+    if countDaily > 0, cycleLines{end+1} = ['  Average: ', sprintf('%.3f', sumDaily/countDaily)]; end
 
-    totalCycleLines = ["Plant Total Cycle (" + dateStrPrint + "):"];
+    totalCycleLines = {['Plant Total Cycle (', dateStrPrint, '):']};
     sumTotal = 0; countTotal = 0;
 `;
     plants.forEach((pk) => {
       script += `    if isfield(data, 'totalCycle') && isfield(data.totalCycle, '${pk}')
         val = data.totalCycle.${pk};
-        totalCycleLines(end+1) = "  ${plantNameMap[pk]}: " + sprintf('%.2f', val);
+        totalCycleLines{end+1} = ['  ${plantNameMap[pk]}: ', sprintf('%.6f', val)];
         sumTotal = sumTotal + val; countTotal = countTotal + 1;
     end\n`;
     });
     script += `
-    if countTotal > 0, totalCycleLines(end+1) = "  Average: " + sprintf('%.2f', sumTotal/countTotal); end
+    if countTotal > 0, totalCycleLines{end+1} = ['  Average: ', sprintf('%.6f', sumTotal/countTotal)]; end
 
-    txt1 = [ "Max deviation timings:", "  " + txtHigh, "  " + txtLow ];
+    txt1 = {'Max deviation timings:', ['  ', txtHigh], ['  ', txtLow]};
     tb1 = annotation('textbox', [0.01, 0.01, 0.2, 0.05], 'String', txt1, ...
                'EdgeColor', 'none', 'FontSize', 9, 'BackgroundColor', [1 1 1 0.7], 'FitBoxToText', 'on');
     makeDraggable(tb1);
@@ -545,9 +662,9 @@ catch ME
 end
 
 linkaxes(axs, 'x');
+${footerCode(safeName)}
 ${commonHelpers}
 ${socHelpers}
-${footerCode(safeName)}
 `;
     allScripts.push({ name: scriptName, script, safeName });
   };
@@ -598,16 +715,14 @@ formatAxis(ax, t, true);
     });
     script += `
 linkaxes(axs, 'x');
-${commonHelpers}
 ${footerCode(safeName)}
+${commonHelpers}
 `;
     allScripts.push({ name: scriptName, script, safeName });
   };
 
-  const is20PercentProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
-
   // Add the scripts
-  if (is20PercentProject) {
+  if (is20PercentProject(project)) {
     generateDailyEvaluationSummary(plants[0]);
   } else {
     plants.forEach(pk => generatePowerflow(pk));
@@ -624,7 +739,8 @@ export const exportMatlabScriptsToZip = async (
   project: string,
   evalData: any,
   zipEntries: { name: string; data: Uint8Array }[],
-  setProgress: (prog: any) => void
+  setProgress: (prog: any) => void,
+  baseFolder?: string
 ) => {
   const allScripts = generateAllMatlabScripts(project, evalData);
   if (allScripts.length === 0) return;
@@ -637,8 +753,9 @@ export const exportMatlabScriptsToZip = async (
   };
   const dataJson = JSON.stringify(serializedEvalData);
   const encoder = new TextEncoder();
+  const folderPrefix = baseFolder ? `${baseFolder}/` : 'MATLAB_Export/';
   zipEntries.push({
-    name: `MATLAB_Export/evalData.json`,
+    name: `${folderPrefix}evalData.json`,
     data: encoder.encode(dataJson)
   });
 
@@ -648,10 +765,11 @@ export const exportMatlabScriptsToZip = async (
     setProgress({ pct: 60 + ((i + 1) / total) * 30, active: true, label: `Generating MATLAB script ${i + 1} of ${total}: ${s.name}...` });
     
     zipEntries.push({
-      name: `MATLAB_Export/${s.safeName}.m`,
+      name: `${folderPrefix}${s.safeName}.m`,
       data: encoder.encode(s.script)
     });
 
     await new Promise(r => setTimeout(r, 0));
   }
 };
+

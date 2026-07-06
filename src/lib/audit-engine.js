@@ -221,6 +221,10 @@ function classifyFile(name, firstRow) {
     if (hdrs.some(h => /Remote dispatch/i.test(h))) return 'POC_REMOTEP';
     if (hdrs.some(h => /SOC|Vab|Vbc|Vca|Frequence/i.test(h))) return 'POC_FVSOC';
     if (hdrs.some(h => /[PQ][\(（]\s*k(W|var)/i.test(h))) return 'POC_PQ';
+    // Broader match for SNTB-style headers: "pccActive power（kW）", "pccReactive power（kvar）"
+    if (hdrs.some(h => /active\s*power|reactive\s*power/i.test(h))) return 'POC_PQ';
+    // Filename-based fallback for ActivePower_ReactivePower files
+    if (/activepower[_-]?reactivepower/i.test(fn) || /1-p_q-poc/i.test(fn)) return 'POC_PQ';
   }
   // 5-minute layout: filename prefix takes precedence; fall back to ESS as default
   if (a1 === 'Time range:') {
@@ -921,8 +925,6 @@ const HC_PROJECTS = [
     { name: 'Plant_01', expected: { POC: 3, ESS: 0, SmartLogger: 0, ESR: 0, ESM: 0 } },
     { name: 'Plant_02', expected: { POC: 3, ESS: 0, SmartLogger: 0, ESR: 0, ESM: 0 } },
     { name: 'Plant_03', expected: { POC: 3, ESS: 0, SmartLogger: 0, ESR: 0, ESM: 0 } },
-    { name: 'Plant_04', expected: { POC: 3, ESS: 0, SmartLogger: 0, ESR: 0, ESM: 0 } },
-    { name: 'Plant_05', expected: { POC: 3, ESS: 0, SmartLogger: 0, ESR: 0, ESM: 0 } },
   ]},
   { id: 'SNTB', label: 'SNTB 30MWH', defaultPlants: [
     { name: 'Plant_01', expected: { POC: 3, ESS: 50, SmartLogger: 13, ESR: 300, ESM: 3400 } },

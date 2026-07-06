@@ -20,6 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { ImportChartScript } from './components/ImportChartScript';
+import { getProjectPlants } from './lib/project-utils';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -322,14 +323,13 @@ export default function App() {
         }
 
         const baseDate = evalData.dataDate ? evalData.dataDate.replace(/-/g, '') : 'UnknownDate';
-        const rootFolder = `Data on ${baseDate}`;
-        const dataValFolder = `${rootFolder}/Data Validation ${baseDate}`;
-        const cycleFolder = `${rootFolder}/cycle ${baseDate}`;
-        const matlabFolder = `${rootFolder}/Matlab code and fig file ${baseDate}`;
-        const graphsFolder = `${rootFolder}/Html and PNG graph ${baseDate}`;
+        const rootFolder = `Dataset ${project} ${baseDate}`;
+        const dataValFolder = `Dataset ${baseDate}`;
+        const cycleFolder = `Cycle calculate ${baseDate}`;
+        const matlabFolder = `Mat code and Fig file ${baseDate}`;
+        const graphsFolder = `Html Graph`;
 
         // Ensure directories exist in the ZIP even if they end up being empty
-        zipEntries.push({ name: `${rootFolder}/`, data: new Uint8Array(0) });
         zipEntries.push({ name: `${dataValFolder}/`, data: new Uint8Array(0) });
         zipEntries.push({ name: `${cycleFolder}/`, data: new Uint8Array(0) });
         zipEntries.push({ name: `${matlabFolder}/`, data: new Uint8Array(0) });
@@ -361,11 +361,10 @@ export default function App() {
         // 2. Add Cycle Summary
         setProgress({ pct: 35, active: true, label: 'Generating Cycle Summary...' });
         let cycleCsv = "Plant,Daily Cycle,Total Cycle\n";
-        const hasPlant2 = !!evalData.dailyCycle?.plant2;
-        const hasPlant3 = !!evalData.dailyCycle?.plant3;
-        cycleCsv += `Plant 1,${evalData.dailyCycle?.plant1 || 0},${evalData.totalCycle?.plant1 || 0}\n`;
-        if (hasPlant2) cycleCsv += `Plant 2,${evalData.dailyCycle?.plant2 || 0},${evalData.totalCycle?.plant2 || 0}\n`;
-        if (hasPlant3) cycleCsv += `Plant 3,${evalData.dailyCycle?.plant3 || 0},${evalData.totalCycle?.plant3 || 0}\n`;
+        const cyclePlants = getProjectPlants(project);
+        cyclePlants.forEach((pk, i) => {
+          cycleCsv += `Plant ${i + 1},${evalData.dailyCycle?.[pk] || 0},${evalData.totalCycle?.[pk] || 0}\n`;
+        });
         
         zipEntries.push({
           name: `${cycleFolder}/Cycle_Summary_${baseDate}.csv`,
@@ -382,7 +381,7 @@ export default function App() {
           setProgress({ pct: 60, active: true, label: `Generating Enterprise Portable View...` });
           
           let cfg: any = {
-            bgWhite: true, traceVisible: [true,true,true,true,true], lineDash: ['solid','solid','solid','dash','dot'],
+            bgWhite: true, traceVisible: [true,true,true,true,true], lineDash: ['solid','solid','solid','solid','solid'], gridSize: 'small',
             lineWidths: [2, 1.6, 1.6, 1.8, 1.2], markerSize: 6, pinSize: 8, pinBgColor: ''
           };
           try {
@@ -390,7 +389,9 @@ export default function App() {
             if (sc) cfg = { ...cfg, ...JSON.parse(sc) };
           } catch(e) {}
           
-          const htmlContent = generatePortableViewHtml(project, evalData, cfg, 'f_p', 'plant1', []);
+          const isBess = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
+          const defaultMetric = isBess ? 'f_p' : 'pf_p1';
+          const htmlContent = generatePortableViewHtml(project, evalData, cfg, defaultMetric, 'plant1', []);
           const encoder = new TextEncoder();
           const u8 = encoder.encode(htmlContent);
           zipEntries.push({ name: `${graphsFolder}/Enterprise_Portable_View_${baseDate}.html`, data: u8 });
@@ -616,7 +617,7 @@ export default function App() {
           {activeTab !== 'smart_report' && activeTab !== 'export' && activeTab !== 'soc' && activeTab !== 'ai' && activeTab !== 'jscript' && (() => {
             const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
             return (
-            <section className={`grid ${project === 'SNTL400' ? 'grid-cols-5' : (isBessProject ? 'grid-cols-4' : 'grid-cols-6')} gap-4 shrink-0`}>
+            <section className={`grid ${getProjectPlants(project).length === 2 ? 'grid-cols-5' : (getProjectPlants(project).length === 1 ? 'grid-cols-4' : 'grid-cols-6')} gap-4 shrink-0`}>
               <KpiCard 
                 title={kpis.p1.name + " Status"} 
                 value={kpis.p1.value} 
@@ -639,7 +640,7 @@ export default function App() {
                   showFlow
                 />
               )}
-              {project !== 'SNTL400' && !isBessProject && (
+              {getProjectPlants(project).length >= 3 && (
                 <KpiCard 
                   title={kpis.p3.name + " Status"} 
                   value={kpis.p3.value} 
@@ -844,7 +845,6 @@ export default function App() {
                       <span className="text-[10px] font-bold text-foreground/50 uppercase tracking-widest">Export Metadata</span>
                       <div className="text-[11px] font-mono text-foreground/80 flex items-center gap-4">
                         <span className="flex items-center gap-1"><FileText size={12} className="text-accent-blue" /> Contains All Uploaded Data</span>
-                        <span className="flex items-center gap-1"><Archive size={12} className="text-[#00E676]" /> Bundled Renderings</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">

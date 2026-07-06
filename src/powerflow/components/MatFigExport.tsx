@@ -55,6 +55,19 @@ const CHART_SPECS: ChartSpec[] = [
   { id: "smart", label: "SmartLogger Summed Power",   icon: <Database size={20} />,  color: "text-yellow-400 dark:text-yellow-400", bgColor: "bg-yellow-500/5 dark:bg-yellow-500/10", borderColor: "border-yellow-500/20 dark:border-yellow-500/30" },
 ];
 
+/** Compute a centered Y-axis range matching MATLAB's centeredYLim function. */
+function centeredYLimMFE(data: number[], center: number, marginFactor: number): [number, number] {
+  const valid = data.filter(v => Number.isFinite(v));
+  if (!valid.length) return [center - 10, center + 10] as [number, number];
+  const yMax = Math.max(...valid);
+  const yMin = Math.min(...valid);
+  const diffMax = Math.abs(yMax - center);
+  const diffMin = Math.abs(yMin - center);
+  let maxDiff = Math.max(diffMax, diffMin);
+  if (maxDiff === 0) maxDiff = 1;
+  return [center - maxDiff * marginFactor, center + maxDiff * marginFactor] as [number, number];
+}
+
 interface ExportLogEntry {
   ts: string;
   file: string;
@@ -1423,7 +1436,24 @@ export function MatFigExport({ theme, result: propsResult, projectId, active, pi
           layout: buildLayout(result, "Active Power and SOC", "P (MW)", "SOC (%)", result.profile.powerRange, [0, 100], cycleAnnotation(result), pinnedPoints, 2),
         };
       }
-      case "qv":
+      case "qv": {
+        const isSNTBqv = profile.label && profile.label.includes("SNTB");
+        const qvQRange = isSNTBqv ? centeredYLimMFE(result.main.qMvar, 0, 1.05) : result.profile.reactiveRange;
+        if (isSNTBqv) {
+          // SNTB: Use single Vavg line matching MATLAB reference
+          return {
+            data: [
+              { x: timeX, y: result.main.vavg, type: "scatter", mode: "lines", name: "Vavg (kV)", line: { color: "#77AC30", width: 0.8 } },
+              { x: timeX, y: result.main.qMvar, type: "scatter", mode: "lines", name: "Q (POC) (MVar)", yaxis: "y2", line: { color: getThemeColor("Q (POC) (MVar)", "#D95319"), width: 2, shape: "hv" } },
+              ...(result.smartLogger ? [{
+                x: result.smartLogger.times.map(formatTime),
+                y: result.smartLogger.totalQMvar,
+                type: "scatter", mode: "lines", name: "Q (BESS) (MVar)", yaxis: "y2", line: { color: getThemeColor("Q (BESS) (MVar)", "#000000"), width: 1.4, shape: "hv" },
+              }] : []),
+            ],
+            layout: buildLayout(result, "Voltage vs Reactive Power", "Vavg (kV)", "Q (MVar)", undefined, qvQRange, undefined, pinnedPoints, 3),
+          };
+        }
         return {
           data: [
             { x: timeX, y: result.main.vab, type: "scatter", mode: "lines", name: "Vab", line: { color: getThemeColor("Vab", "#0072BD"), width: 1.5 } },
@@ -1436,12 +1466,14 @@ export function MatFigExport({ theme, result: propsResult, projectId, active, pi
               type: "scatter", mode: "lines", name: "Q (BESS) (MVar)", yaxis: "y2", line: { color: getThemeColor("Q (BESS) (MVar)", "#000000"), width: 1.4, shape: "hv" },
             }] : []),
           ],
-          layout: buildLayout(result, "Voltage vs Reactive Power", "Line Voltage (kV)", "Q (MVar)", undefined, result.profile.reactiveRange, undefined, pinnedPoints, 3),
+          layout: buildLayout(result, "Voltage vs Reactive Power", "Line Voltage (kV)", "Q (MVar)", undefined, qvQRange, undefined, pinnedPoints, 3),
         };
-      case "vavg":
+      }
+      case "vavg": {
         const isSNTBVal = profile.label && profile.label.includes("SNTB");
         const vColorVal = isSNTBVal ? "#77AC30" : "#0072BD";
         const qColorVal = "#CC0000";
+        const vavgQRange = centeredYLimMFE(result.main.qMvar, 0, 1.05);
         return {
           data: [
             { x: timeX, y: result.main.vavg, type: "scatter", mode: "lines", name: "Vavg (kV)", line: { color: vColorVal, width: isSNTBVal ? 0.8 : 1.6 } },
@@ -1452,8 +1484,9 @@ export function MatFigExport({ theme, result: propsResult, projectId, active, pi
               type: "scatter", mode: "lines", name: "Q (BESS) (MVar)", yaxis: "y2", line: { color: getThemeColor("Q (BESS) (MVar)", "#000000"), width: 1.4, shape: "hv" },
             }] : []),
           ],
-          layout: buildLayout(result, "Reactive Power and Average Voltage", "Vavg (kV)", "Q (MVar)", undefined, result.profile.reactiveRange, undefined, pinnedPoints, 3),
+          layout: buildLayout(result, "Reactive Power and Average Voltage", "Vavg (kV)", "Q (MVar)", undefined, vavgQRange, undefined, pinnedPoints, 3),
         };
+      }
       case "cycle":
         if (!result.cycle.timeline) return null;
         return {

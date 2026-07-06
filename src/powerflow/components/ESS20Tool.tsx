@@ -337,7 +337,7 @@ export function ESS20Tool({ theme, project, active, progress, setProgress, audit
       const name = (entry.file?.name || "").toUpperCase();
       const pathStr = (entry.path || "").toUpperCase();
       for (const targetStr of [name, pathStr]) {
-        if (targetStr.includes("SNTB")) {
+        if (targetStr.match(/SNTB|SNTV|SNTD|SNTZ|MSGP/)) {
           setProjectId("SNTB");
           return;
         }
@@ -1221,8 +1221,12 @@ export function ESS20Tool({ theme, project, active, progress, setProgress, audit
           return { data: pfTraces(result, result.main.times.map(formatTime), rawOptions), layout: layout(result, "Active Power vs Frequency", "P (MW)", "F (Hz)", result.profile.powerRange, [49.7, 50.3], undefined, rawOptions), title: "Active Power vs Frequency" };
         case "soc":
           return { data: socTraces(result, result.main.times.map(formatTime), rawOptions), layout: layout(result, "Active Power and SOC", "P (MW)", "SOC (%)", result.profile.powerRange, [0, 100], cycleAnnotation(result), rawOptions), title: "Active Power and SOC" };
-        case "qv":
-          return { data: qvTraces(result, result.main.times.map(formatTime), rawOptions), layout: layout(result, "Voltage vs Reactive Power", "Line Voltage (kV)", "Q (MVar)", undefined, result.profile.reactiveRange, undefined, rawOptions), title: "Voltage vs Reactive Power" };
+        case "qv": {
+          const isSNTBqv1 = result.profile.label && result.profile.label.match(/SNTB|SNTV|SNTD|SNTZ|MSGP/);
+          const qvY1_1 = isSNTBqv1 ? "Vavg (kV)" : "Line Voltage (kV)";
+          const qvY2Range1 = isSNTBqv1 ? centeredYLim(result.main.qMvar, 0, 1.05) : result.profile.reactiveRange;
+          return { data: qvTraces(result, result.main.times.map(formatTime), rawOptions), layout: layout(result, "Voltage vs Reactive Power", qvY1_1, "Q (MVar)", undefined, qvY2Range1, undefined, rawOptions), title: "Voltage vs Reactive Power" };
+        }
         case "cycle": {
           const x = result.cycle.timeline?.times.map(formatTime) ?? [];
           return { data: [{ x, y: result.cycle.timeline?.avgCycles ?? [], type: "scatter", mode: "lines", name: "Average Equivalent Cycles", line: { color: "#0072BD", width: 2, shape: "linear" } }], layout: layout(result, "ESS Average Equivalent Cycle Timeline", "Average Cycles", "", undefined, undefined, undefined, rawOptions), title: "Cycle Timeline" };
@@ -1274,8 +1278,12 @@ export function ESS20Tool({ theme, project, active, progress, setProgress, audit
             return { data: pfTraces(result, result.main.times.map(formatTime), rawOptions), layout: layout(result, "Active Power vs Frequency", "P (MW)", "F (Hz)", result.profile.powerRange, [49.7, 50.3], undefined, rawOptions) };
           case "soc":
             return { data: socTraces(result, result.main.times.map(formatTime), rawOptions), layout: layout(result, "Active Power and SOC", "P (MW)", "SOC (%)", result.profile.powerRange, [0, 100], cycleAnnotation(result), rawOptions) };
-          case "qv":
-            return { data: qvTraces(result, result.main.times.map(formatTime), rawOptions), layout: layout(result, "Voltage vs Reactive Power", "Line Voltage (kV)", "Q (MVar)", undefined, result.profile.reactiveRange, undefined, rawOptions) };
+          case "qv": {
+            const isSNTBqv2 = result.profile.label && result.profile.label.match(/SNTB|SNTV|SNTD|SNTZ|MSGP/);
+            const qvY1_2 = isSNTBqv2 ? "Vavg (kV)" : "Line Voltage (kV)";
+            const qvY2Range2 = isSNTBqv2 ? centeredYLim(result.main.qMvar, 0, 1.05) : result.profile.reactiveRange;
+            return { data: qvTraces(result, result.main.times.map(formatTime), rawOptions), layout: layout(result, "Voltage vs Reactive Power", qvY1_2, "Q (MVar)", undefined, qvY2Range2, undefined, rawOptions) };
+          }
           case "cycle": {
             const x = result.cycle.timeline?.times.map(formatTime) ?? [];
             return { data: [{ x, y: result.cycle.timeline?.avgCycles ?? [], type: "scatter", mode: "lines", name: "Average Equivalent Cycles", line: { color: "#0072BD", width: 2, shape: "linear" } }], layout: layout(result, "ESS Average Equivalent Cycle Timeline", "Average Cycles", "", undefined, undefined, undefined, rawOptions) };
@@ -3045,7 +3053,10 @@ function ChartView({
   }
 
   if (view === "qv") {
-    return <SinglePlot data={qvTraces(result, timeX, graphOptions)} result={result} title="Voltage vs Reactive Power" y1="Line Voltage (kV)" y2="Q (MVar)" y2Range={result.profile.reactiveRange} graphOptions={graphOptions} pinnedPoints={pinnedPoints} setPinnedPoints={setPinnedPoints} subplot={3} />;
+    const isSNTBqv = result.profile.label && result.profile.label.match(/SNTB|SNTV|SNTD|SNTZ|MSGP/);
+    const qvY1Label = isSNTBqv ? "Vavg (kV)" : "Line Voltage (kV)";
+    const qvY2Range = isSNTBqv ? centeredYLim(result.main.qMvar, 0, 1.05) : result.profile.reactiveRange;
+    return <SinglePlot data={qvTraces(result, timeX, graphOptions)} result={result} title="Voltage vs Reactive Power" y1={qvY1Label} y2="Q (MVar)" y2Range={qvY2Range} graphOptions={graphOptions} pinnedPoints={pinnedPoints} setPinnedPoints={setPinnedPoints} subplot={3} />;
   }
 
   if (view === "cycle") {
@@ -3235,7 +3246,7 @@ function reportGridTraces(result: Ess20Result, x: string[], graphOptions: GraphO
   const res = reportOptions.timeResolution || 5;
   const smooth = reportOptions.smoothCurves;
   const fill = reportOptions.fillAreaY1;
-  const isSNTB = result.profile.label && result.profile.label.includes("SNTB");
+  const isSNTB = result.profile.label && result.profile.label.match(/SNTB|SNTV|SNTD|SNTZ|MSGP/);
 
   // --- Subplot 1: Active Power and Frequency ---
   const p1 = downsampleTrace(x, result.main.pMw, result.main.times, res);
@@ -3420,7 +3431,7 @@ function reportGridTraces(result: Ess20Result, x: string[], graphOptions: GraphO
 }
 
 function reportGridLayout(result: Ess20Result, timeX: string[], graphOptions: GraphOptions, pinnedPoints?: PinnedPoint[]): any {
-  const isSNTB = result.profile.label && result.profile.label.includes("SNTB");
+  const isSNTB = result.profile.label && result.profile.label.match(/SNTB|SNTV|SNTD|SNTZ|MSGP/);
 
   // 30-minute tick marks matching MATLAB: dtTick = minutes(30)
   const tickVals: string[] = [];
@@ -3490,13 +3501,17 @@ function reportGridLayout(result: Ess20Result, timeX: string[], graphOptions: Gr
     ];
   }
 
-  let finalY2Range = result.profile.reactiveRange;
+  // For SNTB, use dynamic centered Y-axis for Q (MVar) matching MATLAB's centeredYLim
+  const defaultY2Range: [number, number] = isSNTB
+    ? centeredYLim(result.main.qMvar, 0, 1.05)
+    : result.profile.reactiveRange;
+  let finalY2Range = defaultY2Range;
   const hasY2Min = graphOptions.y2Min !== "";
   const hasY2Max = graphOptions.y2Max !== "";
   if (hasY2Min || hasY2Max) {
     finalY2Range = [
-      hasY2Min ? parseFloat(graphOptions.y2Min) : result.profile.reactiveRange[0],
-      hasY2Max ? parseFloat(graphOptions.y2Max) : result.profile.reactiveRange[1]
+      hasY2Min ? parseFloat(graphOptions.y2Min) : defaultY2Range[0],
+      hasY2Max ? parseFloat(graphOptions.y2Max) : defaultY2Range[1]
     ];
   }
 
@@ -3967,7 +3982,7 @@ function layout(
   let y1Color = "#2563EB";
   let y2Color = "#EA580C";
   if (isDark && !(graphOptions && graphOptions.whiteBackground)) {
-    if (y1Title.includes("P") || y1Title.includes("Cycles") || y1Title.includes("Vab") || y1Title.includes("Voltage")) {
+    if (y1Title.includes("P") || y1Title.includes("Cycles") || y1Title.includes("Vab") || y1Title.includes("Voltage") || y1Title.includes("Vavg")) {
       y1Color = "#38BDF8";
     }
     if (y2Title.includes("F") || y2Title.includes("Q") || y2Title.includes("SOC")) {
@@ -4165,26 +4180,56 @@ function socTraces(result: Ess20Result, x: string[], graphOptions: GraphOptions)
   ];
 }
 
+/** Compute a centered Y-axis range matching MATLAB's centeredYLim function.
+ *  Centers the range around `center` so that both extremes of the data are visible,
+ *  with a `marginFactor` (e.g. 1.05 = 5% padding). */
+function centeredYLim(data: number[], center: number, marginFactor: number): [number, number] {
+  const valid = data.filter(v => Number.isFinite(v));
+  if (!valid.length) return [center - 10, center + 10] as [number, number];
+  const yMax = Math.max(...valid);
+  const yMin = Math.min(...valid);
+  const diffMax = Math.abs(yMax - center);
+  const diffMin = Math.abs(yMin - center);
+  let maxDiff = Math.max(diffMax, diffMin);
+  if (maxDiff === 0) maxDiff = 1;
+  return [center - maxDiff * marginFactor, center + maxDiff * marginFactor] as [number, number];
+}
+
 function qvTraces(result: Ess20Result, x: string[], graphOptions: GraphOptions) {
   const res = graphOptions.timeResolution || 5;
   const shape = graphOptions.smoothCurves ? "spline" : "linear";
+  const isSNTB = result.profile.label && result.profile.label.match(/SNTB|SNTV|SNTD|SNTZ|MSGP/);
 
-  const v1 = downsampleTrace(x, result.main.vab, result.main.times, res);
-  const v2 = downsampleTrace(x, result.main.vbc, result.main.times, res);
-  const v3 = downsampleTrace(x, result.main.vca, result.main.times, res);
   const q1 = downsampleTrace(x, result.main.qMvar, result.main.times, res);
+  const traces: any[] = [];
 
-  const v1Style = getTraceStyle("Vab", "#0072BD", 1.5, shape, graphOptions);
-  const v2Style = getTraceStyle("Vbc", "#77AC30", 1.5, shape, graphOptions);
-  const v3Style = getTraceStyle("Vca", "#7E2F8E", 1.5, shape, graphOptions);
-  const qStyle = getTraceStyle("Q (POC) (MVar)", "#D95319", 2, shape, graphOptions);
+  if (isSNTB) {
+    // SNTB: Use single Vavg line (green, thin) matching report grid and MATLAB reference
+    const vavg = downsampleTrace(x, result.main.vavg, result.main.times, res);
+    const vStyle = getTraceStyle("Vavg (kV)", "#77AC30", 0.8, shape, graphOptions);
+    const qStyle = getTraceStyle("Q (POC) (MVar)", "#D95319", 2, shape, graphOptions);
+    traces.push(
+      { x: vavg.x, y: vavg.y, type: "scatter", mode: vStyle.mode, name: "Vavg (kV)", visible: vStyle.visible, line: vStyle.line, marker: vStyle.marker },
+      { x: q1.x, y: q1.y, type: "scatter", mode: qStyle.mode, name: "Q (POC) (MVar)", visible: qStyle.visible, yaxis: "y2", line: qStyle.line, marker: qStyle.marker },
+    );
+  } else {
+    // Other projects: use Vab, Vbc, Vca
+    const v1 = downsampleTrace(x, result.main.vab, result.main.times, res);
+    const v2 = downsampleTrace(x, result.main.vbc, result.main.times, res);
+    const v3 = downsampleTrace(x, result.main.vca, result.main.times, res);
 
-  const traces: any[] = [
-    { x: v1.x, y: v1.y, type: "scatter", mode: v1Style.mode, name: "Vab", visible: v1Style.visible, line: v1Style.line, marker: v1Style.marker },
-    { x: v2.x, y: v2.y, type: "scatter", mode: v2Style.mode, name: "Vbc", visible: v2Style.visible, line: v2Style.line, marker: v2Style.marker },
-    { x: v3.x, y: v3.y, type: "scatter", mode: v3Style.mode, name: "Vca", visible: v3Style.visible, line: v3Style.line, marker: v3Style.marker },
-    { x: q1.x, y: q1.y, type: "scatter", mode: qStyle.mode, name: "Q (POC) (MVar)", visible: qStyle.visible, yaxis: "y2", line: qStyle.line, marker: qStyle.marker },
-  ];
+    const v1Style = getTraceStyle("Vab", "#0072BD", 1.5, shape, graphOptions);
+    const v2Style = getTraceStyle("Vbc", "#77AC30", 1.5, shape, graphOptions);
+    const v3Style = getTraceStyle("Vca", "#7E2F8E", 1.5, shape, graphOptions);
+    const qStyle = getTraceStyle("Q (POC) (MVar)", "#D95319", 2, shape, graphOptions);
+
+    traces.push(
+      { x: v1.x, y: v1.y, type: "scatter", mode: v1Style.mode, name: "Vab", visible: v1Style.visible, line: v1Style.line, marker: v1Style.marker },
+      { x: v2.x, y: v2.y, type: "scatter", mode: v2Style.mode, name: "Vbc", visible: v2Style.visible, line: v2Style.line, marker: v2Style.marker },
+      { x: v3.x, y: v3.y, type: "scatter", mode: v3Style.mode, name: "Vca", visible: v3Style.visible, line: v3Style.line, marker: v3Style.marker },
+      { x: q1.x, y: q1.y, type: "scatter", mode: qStyle.mode, name: "Q (POC) (MVar)", visible: qStyle.visible, yaxis: "y2", line: qStyle.line, marker: qStyle.marker },
+    );
+  }
 
   if (result.smartLogger) {
     const qbess = downsampleTrace(result.smartLogger.times.map(formatTime), result.smartLogger.totalQMvar, result.smartLogger.times, res);
@@ -4211,7 +4256,7 @@ function vavgTraces(result: Ess20Result, x: string[], graphOptions: GraphOptions
   const v = downsampleTrace(x, result.main.vavg, result.main.times, res);
   const q = downsampleTrace(x, result.main.qMvar, result.main.times, res);
 
-  const isSNTB = result.profile.label && result.profile.label.includes("SNTB");
+  const isSNTB = result.profile.label && result.profile.label.match(/SNTB|SNTV|SNTD|SNTZ|MSGP/);
   const vColor = isSNTB ? "#77AC30" : "#0072BD";
   const vWidth = isSNTB ? 0.8 : 1.6;
 
