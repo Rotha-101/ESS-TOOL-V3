@@ -42,7 +42,7 @@ import {
   hcCurrentPlants,
   hcInitProjectsAsync,
   HC_PROJECTS,
-  hcRunExport,
+  hcRunExport, hcRunExportMat,
   setHcActiveProject,
   setReactUpdateCb,
   getHcActiveProject,
@@ -86,6 +86,7 @@ export default function App() {
   const { messages } = useAIContext();
 
   const [alertData, setAlertData] = useState<{ title: string, message: string, type: 'success' | 'error' | 'info' } | null>(null);
+  const [isExportingMat, setIsExportingMat] = useState(false);
 
   const archiveInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -106,7 +107,7 @@ export default function App() {
   useEffect(() => {
     // Initialize audit engine asynchronously
     hcInitProjectsAsync();
-    
+
     setReactUpdateCb((type?: string, ...args: any[]) => {
       if (type === 'progress') {
         const pct = args[0] !== undefined ? args[0] : 0;
@@ -117,7 +118,7 @@ export default function App() {
       }
       incrementAuditStateVersion();
     });
-    
+
   }, []);
 
   useEffect(() => {
@@ -130,7 +131,7 @@ export default function App() {
           const tx = db.transaction('eval_data', 'readonly');
           const req = tx.objectStore('eval_data').get(`eval_data_${project}`);
           req.onsuccess = () => setEvalDataPreview(req.result);
-        } catch(err) {}
+        } catch (err) { }
       };
     }
   }, [activeTab, project]);
@@ -148,13 +149,13 @@ export default function App() {
   };
 
   const kpis = getDynamicKpis(project);
-  
+
   // Mock data for the Plotly chart
   const pTotalData = useMemo(() => Array.from({ length: 100 }, (_, i) => ({
     x: i,
     y: Math.sin(i / 10) * 100 + 300 + Math.random() * 50
   })), []);
-  
+
   const freqBusData = useMemo(() => Array.from({ length: 100 }, (_, i) => ({
     x: i,
     y: 50 + Math.random() * 0.2 - 0.1
@@ -166,7 +167,7 @@ export default function App() {
       const getEvalData = () => new Promise((resolve) => {
         const cachedData = useAppStore.getState().evalDataCache[project];
         if (cachedData) return resolve(cachedData);
-        
+
         const request = indexedDB.open('ESS_Toolbox', 1);
         const timeout = setTimeout(() => resolve(null), 60000); // 60s timeout for massive datasets
         request.onsuccess = (e: any) => {
@@ -193,18 +194,23 @@ export default function App() {
             alert("No evaluation data found. Please load data in Daily Evaluation Graph first.");
             return;
           }
-          if ((project === 'SNTL400' || project === 'SNTL600') && useAppStore.getState().showNccPCommand) {
-            evalDataFromDB = { ...evalDataFromDB, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+          const isBess = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+          if (project === 'SNTL400' || project === 'SNTL600' || isBess) {
+            if (useAppStore.getState().showNccPCommand) {
+              evalDataFromDB = { ...evalDataFromDB, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+            } else {
+              evalDataFromDB = { ...evalDataFromDB, cmdP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+            }
           }
           setProgress({ pct: 20, active: true, label: 'Preparing MATLAB script export...' });
           const { exportMatlabScriptsToZip } = await import('./lib/exportMatlab');
-          const zipEntries: {name: string, data: Uint8Array}[] = [];
+          const zipEntries: { name: string, data: Uint8Array }[] = [];
           await exportMatlabScriptsToZip(project, evalDataFromDB, zipEntries, setProgress);
           setProgress({ pct: 90, active: true, label: `Building ZIP archive...` });
-          
+
           const bytes = hcBuildZip(zipEntries);
           for (const e of zipEntries) (e as any).data = null;
-          
+
           const blob = new Blob([bytes], { type: 'application/zip' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -238,8 +244,13 @@ export default function App() {
         });
         return;
       }
-      if ((project === 'SNTL400' || project === 'SNTL600') && useAppStore.getState().showNccPCommand) {
-        evalData = { ...evalData, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+      const isBess = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      if (project === 'SNTL400' || project === 'SNTL600' || isBess) {
+        if (useAppStore.getState().showNccPCommand) {
+          evalData = { ...evalData, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+        } else {
+          evalData = { ...evalData, cmdP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
+        }
       }
 
 
@@ -286,7 +297,7 @@ export default function App() {
   const handleDownload = async () => {
     if (exportFormat === 'zip') {
       try {
-        const zipEntries: {name: string, data: Uint8Array}[] = [];
+        const zipEntries: { name: string, data: Uint8Array }[] = [];
 
         const getEvalData = () => new Promise((resolve) => {
           const cachedData = useAppStore.getState().evalDataCache[project];
@@ -303,7 +314,7 @@ export default function App() {
               const req = tx.objectStore('eval_data').get(`eval_data_${project}`);
               req.onsuccess = () => resolve(req.result);
               req.onerror = () => resolve(null);
-            } catch(err) { resolve(null); }
+            } catch (err) { resolve(null); }
           };
           request.onerror = () => {
             clearTimeout(timeout);
@@ -318,7 +329,7 @@ export default function App() {
           setProgress({ pct: 5, active: true, label: 'Loading dataset from memory cache (Fast)...' });
         }
         const evalData: any = await getEvalData();
-        
+
         if (!evalData || !evalData.timestamps) {
           setProgress({ pct: 0, active: false, label: '' });
           setAlertData({
@@ -344,7 +355,7 @@ export default function App() {
 
         // 1. Gather Validation File Debug Data
         const plants = hcCurrentPlants();
-        const allItems: {plant: any, cat: any, item: any}[] = [];
+        const allItems: { plant: any, cat: any, item: any }[] = [];
         for (const plant of plants)
           for (const cat of HC_CATS)
             for (const item of (plant.files[cat.key] || []))
@@ -353,8 +364,10 @@ export default function App() {
         const BATCH = 8;
         for (let i = 0; i < allItems.length; i += BATCH) {
           const batch = allItems.slice(i, Math.min(i + BATCH, allItems.length));
-          setProgress({ pct: 10 + (i / Math.max(allItems.length, 1)) * 20, active: true,
-            label: `Collecting validation file ${i + 1} of ${allItems.length}...` });
+          setProgress({
+            pct: 10 + (i / Math.max(allItems.length, 1)) * 20, active: true,
+            label: `Collecting validation file ${i + 1} of ${allItems.length}...`
+          });
           const batchResults = await Promise.all(
             batch.map(async ({ plant, cat, item }) => ({
               name: `${dataValFolder}/${plant.name}/${cat.key}/${item.file.name}`,
@@ -372,7 +385,7 @@ export default function App() {
         cyclePlants.forEach((pk, i) => {
           cycleCsv += `Plant ${i + 1},${evalData.dailyCycle?.[pk] || 0},${evalData.totalCycle?.[pk] || 0}\n`;
         });
-        
+
         zipEntries.push({
           name: `${cycleFolder}/Cycle_Summary_${baseDate}.csv`,
           data: new TextEncoder().encode(cycleCsv)
@@ -386,16 +399,16 @@ export default function App() {
         // 4. Render and capture Daily Evaluation Graphs
         if (evalData && evalData.timestamps) {
           setProgress({ pct: 60, active: true, label: `Generating Enterprise Portable View...` });
-          
+
           let cfg: any = {
-            bgWhite: true, traceVisible: [true,true,true,true,true], lineDash: ['solid','solid','solid','solid','solid'], gridSize: 'small',
+            bgWhite: true, traceVisible: [true, true, true, true, true], lineDash: ['solid', 'solid', 'solid', 'solid', 'solid'], gridSize: 'small',
             lineWidths: [2, 1.6, 1.6, 1.8, 1.2], markerSize: 6, pinSize: 8, pinBgColor: ''
           };
           try {
             const sc = localStorage.getItem('ess_graph_config');
             if (sc) cfg = { ...cfg, ...JSON.parse(sc) };
-          } catch(e) {}
-          
+          } catch (e) { }
+
           const isBess = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
           const defaultMetric = isBess ? 'f_p' : 'pf_p1';
           const htmlContent = generatePortableViewHtml(project, evalData, cfg, defaultMetric, 'plant1', []);
@@ -403,7 +416,7 @@ export default function App() {
           const u8 = encoder.encode(htmlContent);
           zipEntries.push({ name: `${graphsFolder}/Enterprise_Portable_View_${baseDate}.html`, data: u8 });
           await new Promise(r => setTimeout(r, 0));
-          
+
           await exportAllGraphsToZip(project, evalData, zipEntries, setProgress, graphsFolder);
         }
 
@@ -423,14 +436,14 @@ export default function App() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         setProgress({ pct: 0, active: false, label: '' });
-        
+
         setAlertData({
           type: 'success',
           title: 'ZIP Archive Complete',
           message: `Successfully generated and downloaded ${filename} containing ${zipEntries.length} files.`
         });
         return;
-      } catch(err: any) {
+      } catch (err: any) {
         console.error("Custom ZIP export error:", err);
         setAlertData({
           type: 'error',
@@ -441,7 +454,7 @@ export default function App() {
         return;
       }
     }
-    
+
     const prefix = exportFilename || exportSource.replace(/\s+/g, '_');
     const filename = `${prefix}_${Date.now()}`;
     const dummyData = [
@@ -520,7 +533,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-background text-foreground font-sans overflow-hidden">
       {/* Header */}
       <GlobalProgressModal />
-      
+
       {/* Custom Alert Modal */}
       {alertData && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-md flex items-center justify-center z-[10000] transition-all">
@@ -532,7 +545,7 @@ export default function App() {
               {alertData.message}
             </div>
             <div className="flex justify-end mt-2 pt-4 border-t border-slate-800/50">
-              <button 
+              <button
                 onClick={() => setAlertData(null)}
                 className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold tracking-widest text-[11px] uppercase transition-colors"
               >
@@ -570,7 +583,7 @@ export default function App() {
             <span className="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
             <HeaderClock />
           </div>
-          <button 
+          <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white/70 hover:text-white transition-colors ml-2"
             title="Toggle theme"
@@ -599,7 +612,7 @@ export default function App() {
             </div>
           </div>
           <div className="p-2 border-t border-border-v">
-            <button 
+            <button
               onClick={() => setIsSettingsOpen(true)}
               className="w-full flex items-center gap-3 px-2 py-2 text-left transition-colors font-medium text-[11px] outline-none hover:bg-foreground/5 text-foreground/60 hover:text-foreground rounded-sm"
             >
@@ -620,491 +633,516 @@ export default function App() {
             />
           ) : (
             <>
-          {/* KPI Cards */}
-          {activeTab !== 'smart_report' && activeTab !== 'export' && activeTab !== 'soc' && activeTab !== 'ai' && activeTab !== 'jscript' && (() => {
-            const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
-            return (
-            <section className={`grid ${getProjectPlants(project).length === 2 ? 'grid-cols-5' : (getProjectPlants(project).length === 1 ? 'grid-cols-4' : 'grid-cols-6')} gap-4 shrink-0`}>
-              <KpiCard 
-                title={kpis.p1.name + " Status"} 
-                value={kpis.p1.value} 
-                unit={kpis.p1.unit} 
-                subtext={kpis.p1.subtext} 
-                subtextColor={kpis.p1.color} 
-                bgClass={kpis.p1.bg}
-                borderColor={kpis.p1.border}
-                showFlow
-              />
-              {!isBessProject && (
-                <KpiCard 
-                  title={kpis.p2.name + " Status"} 
-                  value={kpis.p2.value} 
-                  unit={kpis.p2.unit} 
-                  subtext={kpis.p2.subtext} 
-                  subtextColor={kpis.p2.color} 
-                  bgClass={kpis.p2.bg}
-                  borderColor={kpis.p2.border}
-                  showFlow
-                />
-              )}
-              {getProjectPlants(project).length >= 3 && (
-                <KpiCard 
-                  title={kpis.p3.name + " Status"} 
-                  value={kpis.p3.value} 
-                  unit={kpis.p3.unit} 
-                  subtext={kpis.p3.subtext} 
-                  subtextColor={kpis.p3.color} 
-                  bgClass={kpis.p3.bg}
-                  borderColor={kpis.p3.border}
-                  showFlow
-                />
-              )}
-              <KpiCard 
-                title="Data Quality" 
-                value={kpis.quality.value} 
-                unit={kpis.quality.unit} 
-                subtext={kpis.quality.subtext} 
-                subtextColor={kpis.quality.color} 
-                bgClass={kpis.quality.bg}
-                borderColor={kpis.quality.border}
-              />
-              <div className="col-span-2 border border-t-2 p-3 rounded-sm flex flex-col transition-colors bg-foreground/10 border-border-v border-t-border-v gap-3 justify-between">
-                <div className="text-[10px] text-foreground/40 uppercase font-bold w-full text-left">Export Data</div>
-                 <div className="grid grid-cols-2 gap-2 w-full">
-                  <button onClick={() => hcRunExport(false)} className="bg-blue-600 hover:bg-blue-500 border-0 flex flex-col items-start justify-center p-2.5 transition-all outline-none rounded-sm group relative text-left shadow-sm">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Archive size={14} className="text-white group-hover:scale-110 transition-transform" />
-                      <span className="text-[11px] font-bold text-white">Synohq Data ZIP</span>
-                    </div>
-                    <span className="text-[8px] text-blue-100 font-mono tracking-widest">&gt;10M ARCHIVE</span>
-                  </button>
-                  <button onClick={() => hcRunExport(true)} className="bg-[#5865F2] hover:bg-[#4752C4] border-0 flex flex-col items-start justify-center p-2.5 transition-all outline-none rounded-sm group relative text-left shadow-sm">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Archive size={14} className="text-white group-hover:scale-110 transition-transform" />
-                      <span className="text-[11px] font-bold text-white">Discord Parts ZIP</span>
-                    </div>
-                    <span className="text-[8px] text-[#E0E2FD] font-mono tracking-widest">&lt;10M SPLIT</span>
-                  </button>
-                </div>
-                <div className="flex flex-col gap-2 pt-2 border-t border-border-v/35">
-                  <label className="flex items-center gap-2 cursor-pointer text-[10px] text-foreground/75 hover:text-foreground transition-colors select-none font-mono">
-                    <input 
-                      type="checkbox" 
-                      id="hc-include-mat" 
-                      defaultChecked 
-                      className="rounded border-border-v bg-background text-accent-blue focus:ring-accent-blue/30 h-3.5 w-3.5 cursor-pointer" 
+              {/* KPI Cards */}
+              {activeTab !== 'smart_report' && activeTab !== 'export' && activeTab !== 'soc' && activeTab !== 'ai' && activeTab !== 'jscript' && (() => {
+                const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+                return (
+                  <section className={`grid ${getProjectPlants(project).length === 2 ? 'grid-cols-5' : (getProjectPlants(project).length === 1 ? 'grid-cols-4' : 'grid-cols-6')} gap-4 shrink-0`}>
+                    <KpiCard
+                      title={kpis.p1.name + " Status"}
+                      value={kpis.p1.value}
+                      unit={kpis.p1.unit}
+                      subtext={kpis.p1.subtext}
+                      subtextColor={kpis.p1.color}
+                      bgClass={kpis.p1.bg}
+                      borderColor={kpis.p1.border}
+                      showFlow
                     />
-                    <span>also generate <code className="text-accent-blue bg-accent-blue/10 px-1 rounded text-[9px]">.mat</code> file</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-[10px] text-foreground/75 hover:text-foreground transition-colors select-none font-mono">
-                    <input 
-                      type="checkbox" 
-                      id="opt-include-helper" 
-                      defaultChecked 
-                      className="rounded border-border-v bg-background text-accent-blue focus:ring-accent-blue/30 h-3.5 w-3.5 cursor-pointer" 
-                    />
-                    <span>include MATLAB helper script</span>
-                  </label>
-                </div>
-              </div>
-            </section>
-            );
-          })()}
-          {activeTab === 'signal' ? (
-            <ValidationDebug progress={progress} setProgress={setProgress} />
-          ) : activeTab === 'power' ? (
-            <CycleCalculation project={project} theme={theme} />
-          ) : activeTab === 'soc' ? (
-            <DailyEvaluationGraph theme={theme} project={project} onNavigateToAI={() => switchTab('ai')} />
-          ) : activeTab === 'matcode' ? (
-            <ImportMatCodePage theme={theme as 'dark' | 'light'} project={project} active={true} />
-          ) : activeTab === 'export' ? (
-            (() => {
-              const currentPlants = hcByProject[project] || [];
-              const allFiles: any[] = [];
-              currentPlants.forEach(plant => {
-                Object.keys(plant.files).forEach(catKey => {
-                  (plant.files[catKey] || []).forEach((f: any, index: number) => {
-                    allFiles.push({
-                      id: `${plant.id}-${catKey}-${index}-${f.path || f.file?.name || 'sheet'}`,
-                      name: f.file?.name || f.path || 'unknown.xlsx',
-                      path: f.path || f.file?.name || 'unknown.xlsx',
-                      category: catKey,
-                      plant: plant.name,
-                      status: f.report?.status || 'ready',
-                      file: f.file
-                    });
-                  });
-                });
-              });
-              
-              const exportDisplayFiles = allFiles.length > 0
-                ? [...allFiles].sort((left, right) => {
-                    if (left.plant !== right.plant) return left.plant.localeCompare(right.plant);
-                    return left.name.localeCompare(right.name);
-                  })
-                : [];
-
-              return (
-                <section className="flex-1 min-h-0 bg-panel border border-border-v rounded-sm flex flex-col relative overflow-hidden">
-              <div className="px-3 py-2 border-b border-border-v flex items-center justify-between bg-surface/50 shrink-0">
-                <div className="font-bold text-[11px] uppercase tracking-wider flex items-center gap-2">
-                  <Download size={14} className="text-accent-blue" />
-                  Report Export <span className="text-accent-blue opacity-80 pl-1">(Data Warehouse)</span>
-                </div>
-              </div>
-              <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 flex flex-col bg-background overflow-hidden relative">
-                  
-                  {/* Preview Tabs */}
-                  <div className="flex items-center justify-between px-5 pt-4 border-b border-border-v bg-background">
-                    <div className="flex items-center gap-4">
-                      <button 
-                        onClick={() => setExportPreviewMode('data')}
-                        className={`text-[11px] font-bold uppercase tracking-widest pb-3 border-b-2 transition-all ${exportPreviewMode === 'data' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-foreground/40 hover:text-foreground/70'}`}
-                      >
-                        Data Preview
-                      </button>
-                      <button 
-                        onClick={() => setExportPreviewMode('graph')}
-                        className={`text-[11px] font-bold uppercase tracking-widest pb-3 border-b-2 transition-all ${exportPreviewMode === 'graph' ? 'border-accent-blue text-foreground/40' : 'border-transparent text-foreground/40 hover:text-foreground/70'}`}
-                      >
-                        Graph Preview
-                      </button>
-                    </div>
-                    <div className="pb-3 flex gap-3">
-                      <button 
-                        onClick={() => {
-                          handleExportMatlab();
-                        }}
-                        className="flex items-center justify-center gap-2 px-6 py-2 rounded transition-all bg-accent-blue/10 text-accent-blue border border-accent-blue/20 hover:bg-accent-blue hover:text-white shadow-sm font-bold group"
-                      >
-                        <Archive size={14} className="group-hover:-translate-y-1 transition-transform" />
-                        <span className="text-[10px] uppercase tracking-wider">
-                          Export MATLAB Bundle (ZIP)
-                        </span>
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setExportFormat('zip');
-                          handleDownload();
-                        }}
-                        className="flex items-center justify-center gap-2 px-6 py-2 rounded transition-all bg-[#00E676] text-background hover:bg-[#00C853] shadow-sm font-bold group"
-                      >
-                        <Download size={14} className="group-hover:-translate-y-1 transition-transform" />
-                        <span className="text-[10px] uppercase tracking-wider">
-                          Download ZIP Archive
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Preview Area */}
-                  <div className="flex-1 p-5 overflow-auto relative min-h-[400px]">
-                    {exportPreviewMode === 'data' ? (
-                      <div className="border border-border-v/50 rounded-none overflow-hidden bg-background h-full overflow-y-auto p-4 flex flex-col gap-4">
-                        <PlantBreakdownCards project={project} fontColor={fontColor} />
-                        <div className="w-full flex flex-col border border-border-v rounded-lg overflow-hidden bg-surface/30 flex-1 min-h-[300px]">
-                           <div className="bg-foreground/5 p-3 border-b border-border-v text-[10px] font-bold uppercase shrink-0 flex items-center justify-between">
-                              <span>Select Data Source to Preview</span>
-                              <span className="bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded text-[9px]">{exportDisplayFiles.length} Sources Available</span>
-                           </div>
-                           <div className="flex bg-surface border-b border-border-v/50 text-[9px] font-bold uppercase shrink-0 px-3 py-2 opacity-70">
-                              <div className="flex-1">Source Name</div>
-                              <div className="w-24">Type</div>
-                              <div className="w-40">Target Plants</div>
-                              <div className="w-24 text-center">Action</div>
-                           </div>
-                           <div className="flex-1 overflow-y-auto scrollbar-clean p-2 space-y-1">
-                              {exportDisplayFiles.length === 0 ? (
-                                <div className="p-8 text-center text-[11px] font-mono text-foreground/35 uppercase tracking-widest">
-                                  Run validation first, then preview any spreadsheet here.
-                                </div>
-                              ) : exportDisplayFiles.map((f, i) => (
-                                <div key={f.id} className="flex items-center gap-3 p-2 hover:bg-foreground/5 rounded cursor-pointer border border-transparent hover:border-border-v transition-all">
-                                   <FileSpreadsheet size={14} className="text-green-500 shrink-0" />
-                                   <span className="text-[11px] font-mono flex-1 truncate" title={f.name}>
-                                     {f.name}
-                                   </span>
-                                   <span className="text-[10px] font-mono w-24 opacity-70 bg-foreground/5 px-2 py-0.5 rounded text-center truncate" title={f.category}>Spreadsheet</span>
-                                   <span className="text-[10px] font-mono w-40 opacity-70 truncate" title={f.plant}>{f.plant}</span>
-                                   <button
-                                      onClick={() => openWorkbookPreview(f)}
-                                      className="w-24 text-[9px] bg-accent-blue/10 hover:bg-accent-blue text-accent-blue hover:text-foreground py-1.5 rounded font-bold transition-colors border border-accent-blue/30"
-                                   >
-                                      PREVIEW
-                                   </button>
-                                </div>
-                              ))}
-                           </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="h-full w-full bg-background relative overflow-hidden flex flex-col">
-                        <DailyEvaluationGraph theme={theme} project={project} isExportPreviewMode={true} />
-                      </div>
+                    {!isBessProject && (
+                      <KpiCard
+                        title={kpis.p2.name + " Status"}
+                        value={kpis.p2.value}
+                        unit={kpis.p2.unit}
+                        subtext={kpis.p2.subtext}
+                        subtextColor={kpis.p2.color}
+                        bgClass={kpis.p2.bg}
+                        borderColor={kpis.p2.border}
+                        showFlow
+                      />
                     )}
-                  </div>
-
-                  {/* Footer / Actions */}
-                  <div className="p-3 px-5 border-t border-border-v bg-background flex items-center justify-between shrink-0">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] font-bold text-foreground/50 uppercase tracking-widest">Export Metadata</span>
-                      <div className="text-[11px] font-mono text-foreground/80 flex items-center gap-4">
-                        <span className="flex items-center gap-1"><FileText size={12} className="text-accent-blue" /> Contains All Uploaded Data</span>
+                    {getProjectPlants(project).length >= 3 && (
+                      <KpiCard
+                        title={kpis.p3.name + " Status"}
+                        value={kpis.p3.value}
+                        unit={kpis.p3.unit}
+                        subtext={kpis.p3.subtext}
+                        subtextColor={kpis.p3.color}
+                        bgClass={kpis.p3.bg}
+                        borderColor={kpis.p3.border}
+                        showFlow
+                      />
+                    )}
+                    <KpiCard
+                      title="Data Quality"
+                      value={kpis.quality.value}
+                      unit={kpis.quality.unit}
+                      subtext={kpis.quality.subtext}
+                      subtextColor={kpis.quality.color}
+                      bgClass={kpis.quality.bg}
+                      borderColor={kpis.quality.border}
+                    />
+                    <div className="col-span-2 border border-t-2 p-3 rounded-sm flex flex-col transition-colors bg-foreground/10 border-border-v border-t-border-v gap-3 justify-between">
+                      <div className="text-[10px] text-foreground/40 uppercase font-bold w-full text-left">Export Data</div>
+                      <div className="grid grid-cols-2 gap-2 w-full">
+                        <button onClick={() => hcRunExport(false)} className="bg-blue-600 hover:bg-blue-500 border-0 flex flex-col items-start justify-center p-2.5 transition-all outline-none rounded-sm group relative text-left shadow-sm">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Archive size={14} className="text-white group-hover:scale-110 transition-transform" />
+                            <span className="text-[11px] font-bold text-white">Synohq Data ZIP</span>
+                          </div>
+                          <span className="text-[8px] text-blue-100 font-mono tracking-widest">&gt;10M ARCHIVE</span>
+                        </button>
+                        <button onClick={() => hcRunExport(true)} className="bg-[#5865F2] hover:bg-[#4752C4] border-0 flex flex-col items-start justify-center p-2.5 transition-all outline-none rounded-sm group relative text-left shadow-sm">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Archive size={14} className="text-white group-hover:scale-110 transition-transform" />
+                            <span className="text-[11px] font-bold text-white">Discord Parts ZIP</span>
+                          </div>
+                          <span className="text-[8px] text-[#E0E2FD] font-mono tracking-widest">&lt;10M SPLIT</span>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border-v/35">
+                        <div className="flex flex-col gap-2 justify-center">
+                          <label className="flex items-center gap-2 cursor-pointer text-[10px] text-foreground/75 hover:text-foreground transition-colors select-none font-mono">
+                            <input
+                              type="checkbox"
+                              id="hc-include-mat"
+                              defaultChecked
+                              className="rounded border-border-v bg-background text-accent-blue focus:ring-accent-blue/30 h-3.5 w-3.5 cursor-pointer"
+                            />
+                            <span>also generate <code className="text-accent-blue bg-accent-blue/10 px-1 rounded text-[9px]">.mat</code> file</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer text-[10px] text-foreground/75 hover:text-foreground transition-colors select-none font-mono">
+                            <input
+                              type="checkbox"
+                              id="opt-include-helper"
+                              defaultChecked
+                              className="rounded border-border-v bg-background text-accent-blue focus:ring-accent-blue/30 h-3.5 w-3.5 cursor-pointer"
+                            />
+                            <span>include MATLAB helper script</span>
+                          </label>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (isExportingMat || getHcBusy()) return;
+                            setIsExportingMat(true);
+                            const res = await hcRunExportMat();
+                            if (res) {
+                              setAlertData({
+                                title: res.success ? 'Export Successful' : 'Export Failed',
+                                message: res.message,
+                                type: res.success ? 'success' : 'error'
+                              });
+                            }
+                            setIsExportingMat(false);
+                          }}
+                          disabled={isExportingMat || getHcBusy()}
+                          className={`bg-emerald-600 hover:bg-emerald-500 border-0 flex flex-col items-start justify-center p-2.5 transition-all outline-none rounded-sm group relative text-left shadow-sm h-full ${(isExportingMat || getHcBusy()) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <Download size={14} className="text-white group-hover:scale-110 transition-transform" />
+                            <span className="text-[11px] font-bold text-white">Export mat file</span>
+                          </div>
+                          <span className="text-[8px] text-emerald-100 font-mono tracking-widest">MATLAB WORKSPACE DATA</span>
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button 
-                        onClick={() => alert(`Preview refreshed successfully.`)}
-                        className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-foreground/70 hover:text-foreground border border-border-v rounded-none bg-surface/30 hover:bg-surface transition-all"
-                      >
-                        Refresh Preview
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-                </section>
-              );
-            })()
-
-          ) : activeTab === 'ai' ? (
-            <AIAgent />
-          ) : activeTab === 'smart_report' ? (
-            (() => {
-              const lastValidMessage = [...messages].reverse().find(
-                m => m.role === 'assistant' && 
-                !m.content.includes("Connection established") && 
-                !m.content.includes("áž€áž¶ážšážáž—áŸ’áž‡áž¶áž”áŸ‹áž”áž¶áž“áž‡áŸ„áž‚áž‡áŸáž™") && 
-                !m.content.includes("Successfully connected") && 
-                !m.content.includes("Mock connected")
-              );
-              const lastAiResponse = lastValidMessage?.content || '';
-              return (
-                <section className="flex-1 min-h-0 bg-panel border border-border-v rounded-sm flex flex-col relative overflow-hidden">
-                  <SmartReport lastAiResponse={lastAiResponse} project={project} theme={theme} />
-                </section>
-              );
-            })()
-          ) : (
-            (() => {
-              const currentPlants = hcByProject[project] || [];
-              let totPoc = 0, totEss = 0, totSl = 0, totEsr = 0, totEsm = 0;
-              const allFiles: WorkbookPreviewSource[] = [];
-              const chartColors = ['#00A3FF', '#22c55e', '#eab308', '#a855f7', '#ef4444'];
-              const pieLabels = ['POC', 'ESS', 'SmartLogger', 'ESR', 'ESM'];
-              const legendItems = [
-                { key: 'POC', label: 'POC', description: 'Point of connection data', color: chartColors[0] },
-                { key: 'ESS', label: 'ESS', description: 'Battery cabinet files', color: chartColors[1] },
-                { key: 'SmartLogger', label: 'SmartLogger', description: 'Logger and controller files', color: chartColors[2] },
-                { key: 'ESR', label: 'ESR', description: 'Rack-level telemetry files', color: chartColors[3] },
-                { key: 'ESM', label: 'ESM', description: 'Module-level telemetry files', color: chartColors[4] },
-              ];
-              
-              currentPlants.forEach(plant => {
-                totPoc += plant.files.POC?.length || 0;
-                totEss += plant.files.ESS?.length || 0;
-                totSl += plant.files.SmartLogger?.length || 0;
-                totEsr += plant.files.ESR?.length || 0;
-                totEsm += plant.files.ESM?.length || 0;
-
-                Object.keys(plant.files).forEach(catKey => {
-                  (plant.files[catKey] || []).forEach((f: any, index: number) => {
-                    allFiles.push({
-                      id: `${plant.id}-${catKey}-${index}-${f.path || f.file?.name || 'sheet'}`,
-                      name: f.file?.name || f.path || 'unknown.xlsx',
-                      path: f.path || f.file?.name || 'unknown.xlsx',
-                      category: catKey,
-                      plant: plant.name,
-                      status: f.report?.status || 'ready',
-                      file: f.file
+                  </section>
+                );
+              })()}
+              {activeTab === 'signal' ? (
+                <ValidationDebug progress={progress} setProgress={setProgress} />
+              ) : activeTab === 'power' ? (
+                <CycleCalculation project={project} theme={theme} />
+              ) : activeTab === 'soc' ? (
+                <DailyEvaluationGraph theme={theme} project={project} onNavigateToAI={() => switchTab('ai')} />
+              ) : activeTab === 'matcode' ? (
+                <ImportMatCodePage theme={theme as 'dark' | 'light'} project={project} active={true} />
+              ) : activeTab === 'export' ? (
+                (() => {
+                  const currentPlants = hcByProject[project] || [];
+                  const allFiles: any[] = [];
+                  currentPlants.forEach(plant => {
+                    Object.keys(plant.files).forEach(catKey => {
+                      (plant.files[catKey] || []).forEach((f: any, index: number) => {
+                        allFiles.push({
+                          id: `${plant.id}-${catKey}-${index}-${f.path || f.file?.name || 'sheet'}`,
+                          name: f.file?.name || f.path || 'unknown.xlsx',
+                          path: f.path || f.file?.name || 'unknown.xlsx',
+                          category: catKey,
+                          plant: plant.name,
+                          status: f.report?.status || 'ready',
+                          file: f.file
+                        });
+                      });
                     });
                   });
-                });
-              });
 
-              const hasFiles = allFiles.length > 0;
-              const pieValues = hasFiles ? [totPoc, totEss, totSl, totEsr, totEsm] : [30, 20, 15, 10, 25];
-              const totalFileCount = totPoc + totEss + totSl + totEsr + totEsm;
-              const pieCustomText = hasFiles
-                ? pieValues.map((v, i) => (totalFileCount > 0 && (v / totalFileCount) * 100 > 3) ? `<b>${pieLabels[i]}</b><br>${((v / totalFileCount) * 100).toFixed(1)}%` : '')
-                : pieValues.map((_, i) => `<b>${pieLabels[i]}</b>`);
-              const plantCharts = currentPlants.map((plant) => {
-                const pocActual = plant.files.POC?.length || 0;
-                const essActual = plant.files.ESS?.length || 0;
-                const slActual  = plant.files.SmartLogger?.length || 0;
-                const esrActual = plant.files.ESR?.length || 0;
-                const esmActual = plant.files.ESM?.length || 0;
+                  const exportDisplayFiles = allFiles.length > 0
+                    ? [...allFiles].sort((left, right) => {
+                      if (left.plant !== right.plant) return left.plant.localeCompare(right.plant);
+                      return left.name.localeCompare(right.name);
+                    })
+                    : [];
 
-                const values = [pocActual, essActual, slActual, esrActual, esmActual];
-                const total = values.reduce((sum, v) => sum + v, 0);
-
-                const exp = plant.expected || {};
-
-                return {
-                  id: plant.id,
-                  name: plant.name.replace('_', ' '),
-                  values: total > 0 ? values : [1],
-                  labels: total > 0 ? pieLabels : ['No Data'],
-                  colors: total > 0 ? chartColors : ['#334155'],
-                  total,
-                  hasData: total > 0,
-                  breakdown: [
-                    { label: 'POC',            actual: pocActual, expected: exp.POC          ?? null, color: chartColors[0] },
-                    { label: 'ESS (battery)',  actual: essActual, expected: exp.ESS          ?? null, color: chartColors[1] },
-                    { label: 'SmartLogger',    actual: slActual,  expected: exp.SmartLogger  ?? null, color: chartColors[2] },
-                    { label: 'ESR (rack)',     actual: esrActual, expected: exp.ESR          ?? null, color: chartColors[3] },
-                    { label: 'ESM (module)',   actual: esmActual, expected: exp.ESM          ?? null, color: chartColors[4] },
-                  ],
-                };
-              });
-              
-              const displayFiles = hasFiles
-                ? [...allFiles].sort((left, right) => {
-                    if (left.plant !== right.plant) return left.plant.localeCompare(right.plant);
-                    return left.name.localeCompare(right.name);
-                  })
-                : [];
-
-              return (
-                <section className="flex-1 min-h-0 bg-panel border border-border-v rounded-sm flex flex-col relative overflow-hidden">
-                  <div className="px-3 py-2 border-b border-border-v flex items-center justify-between bg-surface/50 shrink-0">
-                    <div className="font-bold text-[11px] uppercase tracking-wider">
-                      Validation File Overview
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 flex flex-col md:flex-row w-full h-full p-4 gap-6">
-                    <div className="w-full md:w-[42%] flex flex-col bg-surface/30 border border-border-v rounded-lg p-3 gap-4 overflow-y-auto scrollbar-clean">
-                       <div>
-                         <h3 className="text-[10px] uppercase font-bold text-foreground/50 tracking-widest">File Distribution</h3>
-                         <p className="text-[10px] font-mono text-foreground/35 mt-1">Project total followed by plant-level breakdown.</p>
-                       </div>
-
-                       <div className="border border-border-v/70 rounded-lg bg-background/25 p-3">
-                         <div className="flex items-center justify-between mb-2">
-                           <div className="text-[10px] uppercase tracking-widest text-foreground/45 font-bold">Total Distribution</div>
-                           <div className="text-[10px] font-mono text-accent-blue">{totalFileCount.toLocaleString()} files</div>
-                         </div>
-                         <div className="h-[320px]">
-                           <Plot
-                              data={[{
-                                values: pieValues,
-                                labels: pieLabels,
-                                type: 'pie',
-                                hole: 0.75,
-                                pull: pieValues.map(() => 0.015),
-                                marker: { 
-                                  colors: chartColors,
-                                  line: { color: 'transparent', width: 0 } 
-                                },
-                                text: pieCustomText,
-                                textinfo: 'text',
-                                textposition: 'outside',
-                                hoverinfo: 'label+value+percent'
-                              }]}
-                              layout={{
-                                autosize: true,
-                                margin: { t: 30, r: 40, l: 40, b: 30 },
-                                paper_bgcolor: 'transparent',
-                                plot_bgcolor: 'transparent',
-                                font: { family: 'JetBrains Mono', size: 10, color: fontColor },
-                                showlegend: false,
-                                annotations: [
-                                  {
-                                    text: `<b>${totalFileCount.toLocaleString()}</b><br><span style="font-size:10px;color:${fontColor};opacity:.7">TOTAL FILES</span>`,
-                                    showarrow: false,
-                                    font: { size: 14, color: fontColor }
-                                  }
-                                ]
-                              }}
-                              useResizeHandler={true}
-                              style={{ width: '100%', height: '100%' }}
-                              config={{ displayModeBar: false }}
-                            />
-                         </div>
-                         <div className="grid grid-cols-2 gap-2 mt-2">
-                            {legendItems.map((item, index) => (
-                              <div key={item.key} className="rounded border border-border-v/60 bg-panel/60 px-2.5 py-2 text-[10px] font-mono flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }}></span>
-                                  <span className="truncate">{item.label}</span>
-                                </div>
-                                <span className="text-foreground/60">{pieValues[index]}</span>
-                              </div>
-                            ))}
-                          </div>
+                  return (
+                    <section className="flex-1 min-h-0 bg-panel border border-border-v rounded-sm flex flex-col relative overflow-hidden">
+                      <div className="px-3 py-2 border-b border-border-v flex items-center justify-between bg-surface/50 shrink-0">
+                        <div className="font-bold text-[11px] uppercase tracking-wider flex items-center gap-2">
+                          <Download size={14} className="text-accent-blue" />
+                          Report Export <span className="text-accent-blue opacity-80 pl-1">(Data Warehouse)</span>
                         </div>
+                      </div>
+                      <div className="flex-1 flex overflow-hidden">
+                        <div className="flex-1 flex flex-col bg-background overflow-hidden relative">
 
-                        {/* Plant Breakdown */}
-                        <div className="border border-border-v/70 rounded-lg bg-background/25 p-3">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="text-[10px] uppercase tracking-widest text-foreground/45 font-bold">Plant Breakdown</div>
-                            <div className="text-[9px] font-mono text-foreground/35">{plantCharts.length} plant{plantCharts.length !== 1 ? 's' : ''}</div>
+                          {/* Preview Tabs */}
+                          <div className="flex items-center justify-between px-5 pt-4 border-b border-border-v bg-background">
+                            <div className="flex items-center gap-4">
+                              <button
+                                onClick={() => setExportPreviewMode('data')}
+                                className={`text-[11px] font-bold uppercase tracking-widest pb-3 border-b-2 transition-all ${exportPreviewMode === 'data' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-foreground/40 hover:text-foreground/70'}`}
+                              >
+                                Data Preview
+                              </button>
+                              <button
+                                onClick={() => setExportPreviewMode('graph')}
+                                className={`text-[11px] font-bold uppercase tracking-widest pb-3 border-b-2 transition-all ${exportPreviewMode === 'graph' ? 'border-accent-blue text-foreground/40' : 'border-transparent text-foreground/40 hover:text-foreground/70'}`}
+                              >
+                                Graph Preview
+                              </button>
+                            </div>
+                            <div className="pb-3 flex gap-3">
+                              <button
+                                onClick={() => {
+                                  handleExportMatlab();
+                                }}
+                                className="flex items-center justify-center gap-2 px-6 py-2 rounded transition-all bg-accent-blue/10 text-accent-blue border border-accent-blue/20 hover:bg-accent-blue hover:text-white shadow-sm font-bold group"
+                              >
+                                <Archive size={14} className="group-hover:-translate-y-1 transition-transform" />
+                                <span className="text-[10px] uppercase tracking-wider">
+                                  Export MATLAB Bundle (ZIP)
+                                </span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setExportFormat('zip');
+                                  handleDownload();
+                                }}
+                                className="flex items-center justify-center gap-2 px-6 py-2 rounded transition-all bg-[#00E676] text-background hover:bg-[#00C853] shadow-sm font-bold group"
+                              >
+                                <Download size={14} className="group-hover:-translate-y-1 transition-transform" />
+                                <span className="text-[10px] uppercase tracking-wider">
+                                  Download ZIP Archive
+                                </span>
+                              </button>
+                            </div>
                           </div>
-                          <PlantBreakdownCards project={project} fontColor={fontColor} />
-                        </div>
 
-                        {/* Legend */}
-                        <div className="border border-border-v/70 rounded-lg bg-background/25 p-3">
-                          <div className="text-[10px] uppercase tracking-widest text-foreground/45 font-bold mb-3">Legend</div>
-                          <div className="grid grid-cols-1 gap-2">
-                            {legendItems.map(item => (
-                              <div key={item.key} className="flex items-center justify-between gap-3 rounded border border-border-v/60 bg-panel/60 px-3 py-2">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }}></span>
-                                  <div className="min-w-0">
-                                    <div className="text-[10px] uppercase tracking-widest font-bold">{item.label}</div>
-                                    <div className="text-[10px] font-mono text-foreground/50 truncate">{item.description}</div>
+                          {/* Preview Area */}
+                          <div className="flex-1 p-5 overflow-auto relative min-h-[400px]">
+                            {exportPreviewMode === 'data' ? (
+                              <div className="border border-border-v/50 rounded-none overflow-hidden bg-background h-full overflow-y-auto p-4 flex flex-col gap-4">
+                                <PlantBreakdownCards project={project} fontColor={fontColor} />
+                                <div className="w-full flex flex-col border border-border-v rounded-lg overflow-hidden bg-surface/30 flex-1 min-h-[300px]">
+                                  <div className="bg-foreground/5 p-3 border-b border-border-v text-[10px] font-bold uppercase shrink-0 flex items-center justify-between">
+                                    <span>Select Data Source to Preview</span>
+                                    <span className="bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded text-[9px]">{exportDisplayFiles.length} Sources Available</span>
+                                  </div>
+                                  <div className="flex bg-surface border-b border-border-v/50 text-[9px] font-bold uppercase shrink-0 px-3 py-2 opacity-70">
+                                    <div className="flex-1">Source Name</div>
+                                    <div className="w-24">Type</div>
+                                    <div className="w-40">Target Plants</div>
+                                    <div className="w-24 text-center">Action</div>
+                                  </div>
+                                  <div className="flex-1 overflow-y-auto scrollbar-clean p-2 space-y-1">
+                                    {exportDisplayFiles.length === 0 ? (
+                                      <div className="p-8 text-center text-[11px] font-mono text-foreground/35 uppercase tracking-widest">
+                                        Run validation first, then preview any spreadsheet here.
+                                      </div>
+                                    ) : exportDisplayFiles.map((f, i) => (
+                                      <div key={f.id} className="flex items-center gap-3 p-2 hover:bg-foreground/5 rounded cursor-pointer border border-transparent hover:border-border-v transition-all">
+                                        <FileSpreadsheet size={14} className="text-green-500 shrink-0" />
+                                        <span className="text-[11px] font-mono flex-1 truncate" title={f.name}>
+                                          {f.name}
+                                        </span>
+                                        <span className="text-[10px] font-mono w-24 opacity-70 bg-foreground/5 px-2 py-0.5 rounded text-center truncate" title={f.category}>Spreadsheet</span>
+                                        <span className="text-[10px] font-mono w-40 opacity-70 truncate" title={f.plant}>{f.plant}</span>
+                                        <button
+                                          onClick={() => openWorkbookPreview(f)}
+                                          className="w-24 text-[9px] bg-accent-blue/10 hover:bg-accent-blue text-accent-blue hover:text-foreground py-1.5 rounded font-bold transition-colors border border-accent-blue/30"
+                                        >
+                                          PREVIEW
+                                        </button>
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
                               </div>
+                            ) : (
+                              <div className="h-full w-full bg-background relative overflow-hidden flex flex-col">
+                                <DailyEvaluationGraph theme={theme} project={project} isExportPreviewMode={true} />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Footer / Actions */}
+                          <div className="p-3 px-5 border-t border-border-v bg-background flex items-center justify-between shrink-0">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-bold text-foreground/50 uppercase tracking-widest">Export Metadata</span>
+                              <div className="text-[11px] font-mono text-foreground/80 flex items-center gap-4">
+                                <span className="flex items-center gap-1"><FileText size={12} className="text-accent-blue" /> Contains All Uploaded Data</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => alert(`Preview refreshed successfully.`)}
+                                className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-foreground/70 hover:text-foreground border border-border-v rounded-none bg-surface/30 hover:bg-surface transition-all"
+                              >
+                                Refresh Preview
+                              </button>
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })()
+
+              ) : activeTab === 'ai' ? (
+                <AIAgent />
+              ) : activeTab === 'smart_report' ? (
+                (() => {
+                  const lastValidMessage = [...messages].reverse().find(
+                    m => m.role === 'assistant' &&
+                      !m.content.includes("Connection established") &&
+                      !m.content.includes("áž€áž¶ážšážáž—áŸ’áž‡áž¶áž”áŸ‹áž”áž¶áž“áž‡áŸ„áž‚áž‡áŸáž™") &&
+                      !m.content.includes("Successfully connected") &&
+                      !m.content.includes("Mock connected")
+                  );
+                  const lastAiResponse = lastValidMessage?.content || '';
+                  return (
+                    <section className="flex-1 min-h-0 bg-panel border border-border-v rounded-sm flex flex-col relative overflow-hidden">
+                      <SmartReport lastAiResponse={lastAiResponse} project={project} theme={theme} />
+                    </section>
+                  );
+                })()
+              ) : (
+                (() => {
+                  const currentPlants = hcByProject[project] || [];
+                  let totPoc = 0, totEss = 0, totSl = 0, totEsr = 0, totEsm = 0;
+                  const allFiles: WorkbookPreviewSource[] = [];
+                  const chartColors = ['#00A3FF', '#22c55e', '#eab308', '#a855f7', '#ef4444'];
+                  const pieLabels = ['POC', 'ESS', 'SmartLogger', 'ESR', 'ESM'];
+                  const legendItems = [
+                    { key: 'POC', label: 'POC', description: 'Point of connection data', color: chartColors[0] },
+                    { key: 'ESS', label: 'ESS', description: 'Battery cabinet files', color: chartColors[1] },
+                    { key: 'SmartLogger', label: 'SmartLogger', description: 'Logger and controller files', color: chartColors[2] },
+                    { key: 'ESR', label: 'ESR', description: 'Rack-level telemetry files', color: chartColors[3] },
+                    { key: 'ESM', label: 'ESM', description: 'Module-level telemetry files', color: chartColors[4] },
+                  ];
+
+                  currentPlants.forEach(plant => {
+                    totPoc += plant.files.POC?.length || 0;
+                    totEss += plant.files.ESS?.length || 0;
+                    totSl += plant.files.SmartLogger?.length || 0;
+                    totEsr += plant.files.ESR?.length || 0;
+                    totEsm += plant.files.ESM?.length || 0;
+
+                    Object.keys(plant.files).forEach(catKey => {
+                      (plant.files[catKey] || []).forEach((f: any, index: number) => {
+                        allFiles.push({
+                          id: `${plant.id}-${catKey}-${index}-${f.path || f.file?.name || 'sheet'}`,
+                          name: f.file?.name || f.path || 'unknown.xlsx',
+                          path: f.path || f.file?.name || 'unknown.xlsx',
+                          category: catKey,
+                          plant: plant.name,
+                          status: f.report?.status || 'ready',
+                          file: f.file
+                        });
+                      });
+                    });
+                  });
+
+                  const hasFiles = allFiles.length > 0;
+                  const pieValues = hasFiles ? [totPoc, totEss, totSl, totEsr, totEsm] : [30, 20, 15, 10, 25];
+                  const totalFileCount = totPoc + totEss + totSl + totEsr + totEsm;
+                  const pieCustomText = hasFiles
+                    ? pieValues.map((v, i) => (totalFileCount > 0 && (v / totalFileCount) * 100 > 3) ? `<b>${pieLabels[i]}</b><br>${((v / totalFileCount) * 100).toFixed(1)}%` : '')
+                    : pieValues.map((_, i) => `<b>${pieLabels[i]}</b>`);
+                  const plantCharts = currentPlants.map((plant) => {
+                    const pocActual = plant.files.POC?.length || 0;
+                    const essActual = plant.files.ESS?.length || 0;
+                    const slActual = plant.files.SmartLogger?.length || 0;
+                    const esrActual = plant.files.ESR?.length || 0;
+                    const esmActual = plant.files.ESM?.length || 0;
+
+                    const values = [pocActual, essActual, slActual, esrActual, esmActual];
+                    const total = values.reduce((sum, v) => sum + v, 0);
+
+                    const exp = plant.expected || {};
+
+                    return {
+                      id: plant.id,
+                      name: plant.name.replace('_', ' '),
+                      values: total > 0 ? values : [1],
+                      labels: total > 0 ? pieLabels : ['No Data'],
+                      colors: total > 0 ? chartColors : ['#334155'],
+                      total,
+                      hasData: total > 0,
+                      breakdown: [
+                        { label: 'POC', actual: pocActual, expected: exp.POC ?? null, color: chartColors[0] },
+                        { label: 'ESS (battery)', actual: essActual, expected: exp.ESS ?? null, color: chartColors[1] },
+                        { label: 'SmartLogger', actual: slActual, expected: exp.SmartLogger ?? null, color: chartColors[2] },
+                        { label: 'ESR (rack)', actual: esrActual, expected: exp.ESR ?? null, color: chartColors[3] },
+                        { label: 'ESM (module)', actual: esmActual, expected: exp.ESM ?? null, color: chartColors[4] },
+                      ],
+                    };
+                  });
+
+                  const displayFiles = hasFiles
+                    ? [...allFiles].sort((left, right) => {
+                      if (left.plant !== right.plant) return left.plant.localeCompare(right.plant);
+                      return left.name.localeCompare(right.name);
+                    })
+                    : [];
+
+                  return (
+                    <section className="flex-1 min-h-0 bg-panel border border-border-v rounded-sm flex flex-col relative overflow-hidden">
+                      <div className="px-3 py-2 border-b border-border-v flex items-center justify-between bg-surface/50 shrink-0">
+                        <div className="font-bold text-[11px] uppercase tracking-wider">
+                          Validation File Overview
+                        </div>
+                      </div>
+
+                      <div className="flex-1 flex flex-col md:flex-row w-full h-full p-4 gap-6">
+                        <div className="w-full md:w-[42%] flex flex-col bg-surface/30 border border-border-v rounded-lg p-3 gap-4 overflow-y-auto scrollbar-clean">
+                          <div>
+                            <h3 className="text-[10px] uppercase font-bold text-foreground/50 tracking-widest">File Distribution</h3>
+                            <p className="text-[10px] font-mono text-foreground/35 mt-1">Project total followed by plant-level breakdown.</p>
+                          </div>
+
+                          <div className="border border-border-v/70 rounded-lg bg-background/25 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="text-[10px] uppercase tracking-widest text-foreground/45 font-bold">Total Distribution</div>
+                              <div className="text-[10px] font-mono text-accent-blue">{totalFileCount.toLocaleString()} files</div>
+                            </div>
+                            <div className="h-[320px]">
+                              <Plot
+                                data={[{
+                                  values: pieValues,
+                                  labels: pieLabels,
+                                  type: 'pie',
+                                  hole: 0.75,
+                                  pull: pieValues.map(() => 0.015),
+                                  marker: {
+                                    colors: chartColors,
+                                    line: { color: 'transparent', width: 0 }
+                                  },
+                                  text: pieCustomText,
+                                  textinfo: 'text',
+                                  textposition: 'outside',
+                                  hoverinfo: 'label+value+percent'
+                                }]}
+                                layout={{
+                                  autosize: true,
+                                  margin: { t: 30, r: 40, l: 40, b: 30 },
+                                  paper_bgcolor: 'transparent',
+                                  plot_bgcolor: 'transparent',
+                                  font: { family: 'JetBrains Mono', size: 10, color: fontColor },
+                                  showlegend: false,
+                                  annotations: [
+                                    {
+                                      text: `<b>${totalFileCount.toLocaleString()}</b><br><span style="font-size:10px;color:${fontColor};opacity:.7">TOTAL FILES</span>`,
+                                      showarrow: false,
+                                      font: { size: 14, color: fontColor }
+                                    }
+                                  ]
+                                }}
+                                useResizeHandler={true}
+                                style={{ width: '100%', height: '100%' }}
+                                config={{ displayModeBar: false }}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                              {legendItems.map((item, index) => (
+                                <div key={item.key} className="rounded border border-border-v/60 bg-panel/60 px-2.5 py-2 text-[10px] font-mono flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }}></span>
+                                    <span className="truncate">{item.label}</span>
+                                  </div>
+                                  <span className="text-foreground/60">{pieValues[index]}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Plant Breakdown */}
+                          <div className="border border-border-v/70 rounded-lg bg-background/25 p-3">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="text-[10px] uppercase tracking-widest text-foreground/45 font-bold">Plant Breakdown</div>
+                              <div className="text-[9px] font-mono text-foreground/35">{plantCharts.length} plant{plantCharts.length !== 1 ? 's' : ''}</div>
+                            </div>
+                            <PlantBreakdownCards project={project} fontColor={fontColor} />
+                          </div>
+
+                          {/* Legend */}
+                          <div className="border border-border-v/70 rounded-lg bg-background/25 p-3">
+                            <div className="text-[10px] uppercase tracking-widest text-foreground/45 font-bold mb-3">Legend</div>
+                            <div className="grid grid-cols-1 gap-2">
+                              {legendItems.map(item => (
+                                <div key={item.key} className="flex items-center justify-between gap-3 rounded border border-border-v/60 bg-panel/60 px-3 py-2">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }}></span>
+                                    <div className="min-w-0">
+                                      <div className="text-[10px] uppercase tracking-widest font-bold">{item.label}</div>
+                                      <div className="text-[10px] font-mono text-foreground/50 truncate">{item.description}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="w-full md:w-[58%] flex flex-col border border-border-v rounded-lg overflow-hidden bg-surface/30">
+                          <div className="bg-foreground/5 p-3 border-b border-border-v text-[10px] font-bold uppercase shrink-0 flex items-center justify-between">
+                            <span>Select Data Source to Preview</span>
+                            <span className="bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded text-[9px]">{displayFiles.length} Sources Available</span>
+                          </div>
+                          <div className="flex bg-surface border-b border-border-v/50 text-[9px] font-bold uppercase shrink-0 px-3 py-2 opacity-70">
+                            <div className="flex-1">Source Name</div>
+                            <div className="w-24">Type</div>
+                            <div className="w-40">Target Plants</div>
+                            <div className="w-24 text-center">Action</div>
+                          </div>
+                          <div className="flex-1 overflow-y-auto scrollbar-clean p-2 space-y-1">
+                            {displayFiles.length === 0 ? (
+                              <div className="p-8 text-center text-[11px] font-mono text-foreground/35 uppercase tracking-widest">
+                                Run validation first, then preview any spreadsheet here.
+                              </div>
+                            ) : displayFiles.map((f, i) => (
+                              <div key={f.id} className="flex items-center gap-3 p-2 hover:bg-foreground/5 rounded cursor-pointer border border-transparent hover:border-border-v transition-all">
+                                <FileSpreadsheet size={14} className="text-green-500 shrink-0" />
+                                <span className="text-[11px] font-mono flex-1 truncate" title={f.name}>
+                                  {f.name}
+                                </span>
+                                <span className="text-[10px] font-mono w-24 opacity-70 bg-foreground/5 px-2 py-0.5 rounded text-center truncate" title={f.category}>Spreadsheet</span>
+                                <span className="text-[10px] font-mono w-40 opacity-70 truncate" title={f.plant}>{f.plant}</span>
+                                <button
+                                  onClick={() => openWorkbookPreview(f)}
+                                  className="w-24 text-[9px] bg-accent-blue/10 hover:bg-accent-blue text-accent-blue hover:text-foreground py-1.5 rounded font-bold transition-colors border border-accent-blue/30"
+                                >
+                                  PREVIEW
+                                </button>
+                              </div>
                             ))}
                           </div>
                         </div>
-                    </div>
-
-                    <div className="w-full md:w-[58%] flex flex-col border border-border-v rounded-lg overflow-hidden bg-surface/30">
-                       <div className="bg-foreground/5 p-3 border-b border-border-v text-[10px] font-bold uppercase shrink-0 flex items-center justify-between">
-                          <span>Select Data Source to Preview</span>
-                          <span className="bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded text-[9px]">{displayFiles.length} Sources Available</span>
-                       </div>
-                       <div className="flex bg-surface border-b border-border-v/50 text-[9px] font-bold uppercase shrink-0 px-3 py-2 opacity-70">
-                          <div className="flex-1">Source Name</div>
-                          <div className="w-24">Type</div>
-                          <div className="w-40">Target Plants</div>
-                          <div className="w-24 text-center">Action</div>
-                       </div>
-                       <div className="flex-1 overflow-y-auto scrollbar-clean p-2 space-y-1">
-                          {displayFiles.length === 0 ? (
-                            <div className="p-8 text-center text-[11px] font-mono text-foreground/35 uppercase tracking-widest">
-                              Run validation first, then preview any spreadsheet here.
-                            </div>
-                          ) : displayFiles.map((f, i) => (
-                            <div key={f.id} className="flex items-center gap-3 p-2 hover:bg-foreground/5 rounded cursor-pointer border border-transparent hover:border-border-v transition-all">
-                               <FileSpreadsheet size={14} className="text-green-500 shrink-0" />
-                               <span className="text-[11px] font-mono flex-1 truncate" title={f.name}>
-                                 {f.name}
-                               </span>
-                               <span className="text-[10px] font-mono w-24 opacity-70 bg-foreground/5 px-2 py-0.5 rounded text-center truncate" title={f.category}>Spreadsheet</span>
-                               <span className="text-[10px] font-mono w-40 opacity-70 truncate" title={f.plant}>{f.plant}</span>
-                               <button
-                                  onClick={() => openWorkbookPreview(f)}
-                                  className="w-24 text-[9px] bg-accent-blue/10 hover:bg-accent-blue text-accent-blue hover:text-foreground py-1.5 rounded font-bold transition-colors border border-accent-blue/30"
-                               >
-                                  PREVIEW
-                               </button>
-                            </div>
-                          ))}
-                       </div>
-                    </div>
-                  </div>
-                </section>
-              );
-            })()
-          )}
+                      </div>
+                    </section>
+                  );
+                })()
+              )}
             </>
           )}
 

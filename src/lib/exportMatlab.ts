@@ -118,19 +118,25 @@ function yl = centeredYLim(yData, centerPoint, marginFactor)
 end
 
 % Helper to format axes
-function formatAxis(ax, t, showLabels, fn, fs)
-    xlim(ax, [min(t) max(t)]);
+function formatAxis(ax, t, isBottom, fn, fs)
+    t_start = dateshift(min(t), 'start', 'day');
+    t_end = t_start + days(1);
+    xlim(ax, [t_start t_end]);
     try
-        ax.XTick = dateshift(min(t), 'start', 'minute', 0) : minutes(30) : max(t);
+        ax.XTick = t_start : minutes(30) : t_end;
     catch
     end
-    if showLabels
-        xtickformat(ax, 'HH:mm');
-        xtickangle(ax, 45);
-    else
-        xticklabels(ax, {});
+    xtickformat(ax, 'HH:mm');
+    xtickangle(ax, 45);
+    if isBottom
+        xlabel(ax, 'Time', 'FontName', fn, 'FontSize', fs);
     end
-    set(ax, 'FontName', fn, 'FontSize', fs);
+    dateStr = datestr(t_start, 'mmm dd, yyyy');
+    text(ax, 1.0, -0.25, dateStr, 'Units', 'normalized', 'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', 'FontName', fn, 'FontSize', fs - 1);
+    
+    set(ax, 'FontName', fn, 'FontSize', fs, 'TickDir', 'in');
+    grid(ax, 'on');
+    box(ax, 'on');
 end
 
 % Create Draggable Annotation
@@ -157,6 +163,15 @@ function tb = createDraggableAnnotation(pos, str, bg, edge, fs, fn)
             set(fig, 'WindowButtonMotionFcn', '');
             set(fig, 'WindowButtonUpFcn', '');
         end
+    end
+end
+
+% Interactive Legend Toggle Visibility
+function toggleVisibility(~, evt)
+    if strcmp(get(evt.Peer, 'Visible'), 'on')
+        set(evt.Peer, 'Visible', 'off');
+    else
+        set(evt.Peer, 'Visible', 'on');
     end
 end
 `;
@@ -314,8 +329,9 @@ plot(t, freq, '-', 'Color', COLOR_FREQ, 'LineWidth', LW_BOLD);
 ylabel('F (Hz)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(centeredYLim(freq, F_CENTER_HZ, MARGIN_FACTOR));
 title('Frequency & Active Power', 'FontName', FONT_NAME);
-legend({'P (POC)', 'Frequency'}, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME);
-formatAxis(ax, t, true, FONT_NAME, FONT_SIZE_AXIS);
+legend({'P (POC)', 'Frequency'}, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME, 'ItemHitFcn', @toggleVisibility);
+lgd = findobj(gcf, 'Type', 'legend'); set(lgd(1), 'EdgeColor', 'k');
+formatAxis(ax, t, false, FONT_NAME, FONT_SIZE_AXIS);
 
 %% =========================================================================
 % TILE 2: SOC & ACTIVE POWER
@@ -359,8 +375,9 @@ pSOC = plot(t, soc, '-', 'Color', COLOR_SOC, 'LineWidth', LW_THICK);
 ylabel('SOC (%)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS);
 legH(end+1) = pSOC; legT{end+1} = 'SOC';
 title('SOC & Active Power', 'FontName', FONT_NAME);
-legend(legH, legT, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME);
-formatAxis(ax, t, true, FONT_NAME, FONT_SIZE_AXIS);
+legend(legH, legT, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME, 'ItemHitFcn', @toggleVisibility);
+lgd = findobj(gcf, 'Type', 'legend'); set(lgd(1), 'EdgeColor', 'k');
+formatAxis(ax, t, false, FONT_NAME, FONT_SIZE_AXIS);
 
 %% =========================================================================
 % TILE 3: REACTIVE POWER & VOLTAGE
@@ -386,21 +403,22 @@ pQ = plot(t, qTotal, '-', 'Color', COLOR_Q_TOTAL, 'LineWidth', LW_THICK);
 legH3(end+1) = pQ; legT3{end+1} = 'Q total';
 yDataQ = qTotal(:);
 
-if any(~isnan(qBess) & abs(qBess) > 0.001) & any(~isnan(pBESS) & abs(pBESS) > 0.001)
+${project !== 'SNTV' ? `if any(~isnan(qBess) & abs(qBess) > 0.001) & any(~isnan(pBESS) & abs(pBESS) > 0.001)
     pQBess = plot(t, qBess, '-', 'Color', COLOR_Q_BESS, 'LineWidth', LW_BOLD);
     legH3(end+1) = pQBess; legT3{end+1} = 'Q (BESS) (MVar)';
     yDataQ = [yDataQ; qBess(:)];
-end
+end` : ''}
 
 if any(~isnan(cmdQ))
-    pCmdQ = stairs(t, cmdQ, 'LineWidth', LW_CMD, 'Color', COLOR_CMD_Q, 'LineStyle', LS_CMD);
+    pCmdQ = stairs(t, cmdQ, 'LineStyle', '--', 'Color', 'k', 'LineWidth', 2);
     legH3(end+1) = pCmdQ; legT3{end+1} = 'Q command from NCC';
     yDataQ = [yDataQ; cmdQ(:)];
 end
 ylabel('Q (MVar)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(centeredYLim(yDataQ, Q_CENTER_MVAR, MARGIN_FACTOR));
 title('Reactive Power & Voltage', 'FontName', FONT_NAME);
-legend(legH3, legT3, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME);
+legend(legH3, legT3, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME, 'ItemHitFcn', @toggleVisibility);
+lgd = findobj(gcf, 'Type', 'legend'); set(lgd(1), 'EdgeColor', 'k');
 formatAxis(ax, t, true, FONT_NAME, FONT_SIZE_AXIS);
 
 % linkaxes(axs, 'x');
@@ -506,8 +524,9 @@ plot(t, freq, '-', 'Color', COLOR_FREQ, 'LineWidth', LW_BOLD);
 ylabel('F (Hz)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(centeredYLim(freq, F_CENTER_HZ, MARGIN_FACTOR));
 title('Frequency & Active Power', 'FontName', FONT_NAME);
-legend({'P total', 'Frequency'}, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME);
-formatAxis(ax, t, true, FONT_NAME, FONT_SIZE_AXIS);
+legend({'P total', 'Frequency'}, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME, 'ItemHitFcn', @toggleVisibility);
+lgd = findobj(gcf, 'Type', 'legend'); set(lgd(1), 'EdgeColor', 'k');
+formatAxis(ax, t, false, FONT_NAME, FONT_SIZE_AXIS);
 
 %% =========================================================================
 % TILE 2: SOC & ACTIVE POWER
@@ -551,8 +570,9 @@ pSOC = plot(t, soc, '-', 'Color', COLOR_SOC, 'LineWidth', LW_THICK);
 ylabel('SOC (%)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS);
 legH(end+1) = pSOC; legT{end+1} = 'SOC';
 title('SOC & Active Power', 'FontName', FONT_NAME);
-legend(legH, legT, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME);
-formatAxis(ax, t, true, FONT_NAME, FONT_SIZE_AXIS);
+legend(legH, legT, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME, 'ItemHitFcn', @toggleVisibility);
+lgd = findobj(gcf, 'Type', 'legend'); set(lgd(1), 'EdgeColor', 'k');
+formatAxis(ax, t, false, FONT_NAME, FONT_SIZE_AXIS);
 
 %% =========================================================================
 % TILE 3: REACTIVE POWER & VOLTAGE
@@ -578,21 +598,22 @@ pQ = plot(t, qTotal, '-', 'Color', COLOR_Q_TOTAL, 'LineWidth', LW_THICK);
 legH3(end+1) = pQ; legT3{end+1} = 'Q total';
 yDataQ = qTotal(:);
 
-if any(~isnan(qBess) & abs(qBess) > 0.001) & any(~isnan(pBESS) & abs(pBESS) > 0.001)
+${project !== 'SNTV' ? `if any(~isnan(qBess) & abs(qBess) > 0.001) & any(~isnan(pBESS) & abs(pBESS) > 0.001)
     pQBess = plot(t, qBess, '-', 'Color', COLOR_Q_BESS, 'LineWidth', LW_BOLD);
     legH3(end+1) = pQBess; legT3{end+1} = 'Q (BESS) (MVar)';
     yDataQ = [yDataQ; qBess(:)];
-end
+end` : ''}
 
 if any(~isnan(cmdQ))
-    pCmdQ = stairs(t, cmdQ, 'LineWidth', LW_CMD, 'Color', COLOR_CMD_Q, 'LineStyle', LS_CMD);
+    pCmdQ = stairs(t, cmdQ, 'LineStyle', '--', 'Color', 'k', 'LineWidth', 2);
     legH3(end+1) = pCmdQ; legT3{end+1} = 'Q command from NCC';
     yDataQ = [yDataQ; cmdQ(:)];
 end
 ylabel('Q (MVar)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(centeredYLim(yDataQ, Q_CENTER_MVAR, MARGIN_FACTOR));
 title('Reactive Power & Voltage', 'FontName', FONT_NAME);
-legend(legH3, legT3, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME);
+legend(legH3, legT3, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME, 'ItemHitFcn', @toggleVisibility);
+lgd = findobj(gcf, 'Type', 'legend'); set(lgd(1), 'EdgeColor', 'k');
 formatAxis(ax, t, true, FONT_NAME, FONT_SIZE_AXIS);
 
 % linkaxes(axs, 'x');
@@ -710,8 +731,9 @@ if ~isnat(tLow)
 end
 
 title('${plantNameMap[pk]} | Active Power & SOC', 'FontName', FONT_NAME);
-legend(legH, legT, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME);
-formatAxis(ax, t, true, FONT_NAME, FONT_SIZE_AXIS);
+legend(legH, legT, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME, 'ItemHitFcn', @toggleVisibility);
+lgd = findobj(gcf, 'Type', 'legend'); set(lgd(1), 'EdgeColor', 'k');
+formatAxis(ax, t, false, FONT_NAME, FONT_SIZE_AXIS);
 `;
     });
     script += `
@@ -812,7 +834,7 @@ legH(end+1) = pQ; legT{end+1} = 'Q total';
 yDataQ = qTotal(:);
 
 if any(~isnan(cmdQ))
-    pCmdQ = stairs(t, cmdQ, 'LineWidth', LW_CMD, 'Color', COLOR_CMD_Q, 'LineStyle', LS_CMD);
+    pCmdQ = stairs(t, cmdQ, 'LineStyle', '--', 'Color', 'k', 'LineWidth', 2);
     legH(end+1) = pCmdQ; legT{end+1} = 'Q command from NCC';
     yDataQ = [yDataQ; cmdQ(:)];
 end
@@ -820,7 +842,8 @@ ylabel('Q (MVar)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS);
 ylim(centeredYLim(yDataQ, Q_CENTER_MVAR, MARGIN_FACTOR));
 
 title('${plantNameMap[pk]} | Reactive Power & Voltage', 'FontName', FONT_NAME);
-legend(legH, legT, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME);
+legend(legH, legT, 'Location', 'northwest', 'FontSize', FONT_SIZE_LEGEND, 'FontName', FONT_NAME, 'ItemHitFcn', @toggleVisibility);
+lgd = findobj(gcf, 'Type', 'legend'); set(lgd(1), 'EdgeColor', 'k');
 formatAxis(ax, t, true, FONT_NAME, FONT_SIZE_AXIS);
 `;
     });

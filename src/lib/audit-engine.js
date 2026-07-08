@@ -2214,7 +2214,7 @@ export {
   hcInitProjects,
   hcInitProjectsAsync,
   hcClearPlantData,
-  hcBulkImport, hcAcceptFiles, hcRunExport,
+  hcBulkImport, hcAcceptFiles, hcRunExport, hcRunExportMat,
   hcAddPlant,
   hcDeletePlant,
   hcResetActiveProject,
@@ -2252,3 +2252,34 @@ export function setHcActiveProject(val) {
 }
 
 export function getHcBusy() { return typeof hcBusy !== 'undefined' ? hcBusy : false; }
+async function hcRunExportMat() {
+  if (hcBusy) { hcLog('Busy - wait for the current operation to finish', 'warn'); return { success: false, message: 'Busy - another operation is running.' }; }
+  hcSetBusy(true, 'export');
+  hcSetProgress(10, true, 'Exporting .mat file... Please wait.');
+  try {
+    const today = new Date();
+    const tag = String(today.getDate()).padStart(2,'0') + String(today.getMonth()+1).padStart(2,'0') + today.getFullYear();
+    
+    hcLog(`Building .mat for ${hcActiveProject} (using signal mappings below)...`, 'info');
+    const matBytes = await hcBuildMatBytes();
+    if (matBytes) {
+      const matName = `${hcActiveProject}_${tag}.mat`;
+      triggerDownload(new Blob([matBytes], { type: 'application/octet-stream' }), matName);
+      hcLog(`V ${matName} (${(matBytes.byteLength/1024/1024).toFixed(1)} MB) downloaded`, 'ok');
+      
+      // Optional finalize_huawei_mat.m helper
+      if ($('opt-include-helper') && $('opt-include-helper').checked) {
+        triggerDownload(new Blob([buildFinalizeMScript()], { type: 'text/plain' }), 'finalize_huawei_mat.m');
+        hcLog(`  + finalize_huawei_mat.m - run once in MATLAB to convert time cells to datetime`, 'ok');
+      }
+      return { success: true, message: `Successfully generated and downloaded ${matName} (${(matBytes.byteLength/1024/1024).toFixed(1)} MB).` };
+    }
+    return { success: false, message: 'Failed to build .mat bytes.' };
+  } catch (err) {
+    hcLog(`? .mat build failed: ${err.message}`, 'err'); console.error(err);
+    return { success: false, message: err.message };
+  } finally {
+    hcSetProgress(100, false);
+    hcSetBusy(false);
+  }
+}
