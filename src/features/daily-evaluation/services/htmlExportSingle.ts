@@ -1277,6 +1277,12 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
           div2.style.width = '100%';
           div2.style.position = 'relative';
           containerDiv.appendChild(div2);
+          const div2Traces = [
+            applyTrace({ y: evalDataRaw.pPccPVS && (evalDataRaw.pPccPVS?.[pk] || []) && ((evalDataRaw.pPccPVS?.[pk] || []) || []).some((v) => v != null && !isNaN(v)) ? (evalDataRaw.pPccPVS?.[pk] || []) : (evalDataRaw.pTotal?.[pk] || []), type: 'scattergl', mode: 'lines', name: 'P (POC) (MW)', line: { color: '#0072BD', width: 1.2 } }, 0),
+            applyTrace({ y: evalDataRaw.pPV ? (evalDataRaw.pPV?.[pk] || []) : [], type: 'scattergl', mode: 'lines', name: 'P (PV) (MW)', showlegend: Boolean(evalDataRaw.pPV && (evalDataRaw.pPV?.[pk] || []) && ((evalDataRaw.pPV?.[pk] || []) || []).some((v) => v != null && !isNaN(v))), line: { color: '#EDB120', width: 2 } }, 1),
+            applyTrace({ y: evalDataRaw.pBESS ? (evalDataRaw.pBESS?.[pk] || []) : [], type: 'scattergl', mode: 'lines', name: 'P (BESS) (MW)', showlegend: Boolean(evalDataRaw.pBESS && (evalDataRaw.pBESS?.[pk] || []) && ((evalDataRaw.pBESS?.[pk] || []) || []).some((v) => v != null && !isNaN(v))), line: { color: '#77AC30', width: 2 } }, 2),
+            applyTrace({ y: evalDataRaw.cmdP?.[pk], type: 'scatter', mode: 'lines', name: 'P command from NCC', showlegend: Boolean(evalDataRaw.cmdP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#008000', width: 1.6, shape: 'hv', dash: 'dot' } }, 1),
+            applyTrace({ y: evalDataRaw.remoteP?.[pk], type: 'scatter', mode: 'lines', connectgaps: true, name: 'Remote Active Power', showlegend: Boolean(evalDataRaw.remoteP?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), line: { color: '#9966cc', width: 1.6, dash: 'dot', shape: 'hv' } }, 2),
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
           ];
           const layoutSoc = getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'fig4_soc_' + pk);
