@@ -174,6 +174,34 @@ function toggleVisibility(~, evt)
         set(evt.Peer, 'Visible', 'on');
     end
 end
+
+% Plot Continuous Line Ignoring NaNs
+function h = plotContinuous(t, y, varargin)
+    if iscell(y)
+        y_num = NaN(size(y));
+        for i = 1:length(y)
+            if ~isempty(y{i}) && isnumeric(y{i})
+                y_num(i) = double(y{i}(1));
+            elseif isstring(y{i}) || ischar(y{i})
+                y_num(i) = str2double(string(y{i}));
+            end
+        end
+        y = y_num;
+    end
+    if isstring(y) || ischar(y)
+        y = str2double(string(y));
+    end
+    if ~isnumeric(y)
+        y = double(y);
+    end
+    
+    idx = ~isnan(y);
+    if sum(idx) == 0
+        h = plot(t, y, varargin{:}); 
+    else
+        h = plot(t(idx), y(idx), varargin{:});
+    end
+end
 `;
 
   const socHelpers = `
@@ -282,30 +310,30 @@ end
 %% =========================================================================
 % EXTRACT PLANT DATA
 %% =========================================================================
-pTotal = data.pTotal.${pk};
+pTotal = round(data.pTotal.${pk}, 2);
 if isfield(data, 'pPccPVS')
-    pPccPVS = data.pPccPVS.${pk};
-    pPV = data.pPV.${pk};
-    pBESS = data.pBESS.${pk};
+    pPccPVS = round(data.pPccPVS.${pk}, 2);
+    pPV = round(data.pPV.${pk}, 2);
+    pBESS = round(data.pBESS.${pk}, 2);
 else
     pPccPVS = nan(size(pTotal));
     pPV = nan(size(pTotal));
     pBESS = nan(size(pTotal));
 end
 if isfield(data, 'qBess')
-    qBess = data.qBess.${pk};
+    qBess = round(data.qBess.${pk}, 2);
 else
     qBess = nan(size(pTotal));
 end
 freq = data.freq.${pk};
-cmdP = data.cmdP.${pk};
-remoteP = data.remoteP.${pk};
-soc = data.soc.${pk};
-vab = data.vab.${pk};
-vbc = data.vbc.${pk};
-vca = data.vca.${pk};
-qTotal = data.qTotal.${pk};
-cmdQ = data.cmdQ.${pk};
+cmdP = round(data.cmdP.${pk}, 2);
+remoteP = round(data.remoteP.${pk}, 2);
+soc = round(data.soc.${pk}, 1);
+vab = round(data.vab.${pk}, 2);
+vbc = round(data.vbc.${pk}, 2);
+vca = round(data.vca.${pk}, 2);
+qTotal = round(data.qTotal.${pk}, 2);
+cmdQ = round(data.cmdQ.${pk}, 2);
 
 % Determine active power to use
 if any(~isnan(pPccPVS) & abs(pPccPVS) > 0.001)
@@ -319,13 +347,13 @@ end
 %% =========================================================================
 ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = COLOR_P_TOTAL;
-plot(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
+plotContinuous(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
 ylabel('P (MW)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(centeredYLim(pPlot, P_CENTER_MW, MARGIN_FACTOR));
 if SHOW_GRID, grid on; end
 
 yyaxis right; ax.YColor = COLOR_FREQ;
-plot(t, freq, '-', 'Color', COLOR_FREQ, 'LineWidth', LW_BOLD);
+plotContinuous(t, freq, '-', 'Color', COLOR_FREQ, 'LineWidth', LW_BOLD);
 ylabel('F (Hz)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(centeredYLim(freq, F_CENTER_HZ, MARGIN_FACTOR));
 title('Frequency & Active Power', 'FontName', FONT_NAME);
@@ -341,17 +369,17 @@ yyaxis left; ax.YColor = COLOR_P_TOTAL; hold on;
 legH = gobjects(0); legT = {};
 yDataAll = pPlot(:);
 
-pPlotLine = plot(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
+pPlotLine = plotContinuous(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
 legH(end+1) = pPlotLine; legT{end+1} = 'P (POC)';
 
 if any(~isnan(pPV) & abs(pPV) > 0.001)
-    pPVPlot = plot(t, pPV, '-', 'Color', COLOR_P_PV, 'LineWidth', LW_BOLD);
+    pPVPlot = plotContinuous(t, pPV, '-', 'Color', COLOR_P_PV, 'LineWidth', LW_BOLD);
     legH(end+1) = pPVPlot; legT{end+1} = 'P (PV) (MW)';
     yDataAll = [yDataAll; pPV(:)];
 end
 
 if any(~isnan(pBESS) & abs(pBESS) > 0.001)
-    pBESSPlot = plot(t, pBESS, '-', 'Color', COLOR_P_BESS, 'LineWidth', LW_BOLD);
+    pBESSPlot = plotContinuous(t, pBESS, '-', 'Color', COLOR_P_BESS, 'LineWidth', LW_BOLD);
     legH(end+1) = pBESSPlot; legT{end+1} = 'P (BESS) (MW)';
     yDataAll = [yDataAll; pBESS(:)];
 end
@@ -362,7 +390,7 @@ if any(~isnan(cmdP))
     yDataAll = [yDataAll; cmdP(:)];
 end
 if any(~isnan(remoteP))
-    pRem = stairs(t, remoteP, 'LineStyle', '-', 'LineWidth', LW_CMD, 'Color', COLOR_REMOTE_P);
+    pRem = plotContinuous(t, remoteP, '-', 'LineWidth', LW_CMD, 'Color', COLOR_REMOTE_P);
     legH(end+1) = pRem; legT{end+1} = 'Remote Active Power';
     yDataAll = [yDataAll; remoteP(:)];
 end
@@ -371,7 +399,7 @@ ylim(centeredYLim(yDataAll, P_CENTER_MW, MARGIN_FACTOR));
 if SHOW_GRID, grid on; end
 
 yyaxis right; ax.YColor = COLOR_SOC;
-pSOC = plot(t, soc, '-', 'Color', COLOR_SOC, 'LineWidth', LW_THICK);
+pSOC = plotContinuous(t, soc, '-', 'Color', COLOR_SOC, 'LineWidth', LW_THICK);
 ylabel('SOC (%)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS);
 legH(end+1) = pSOC; legT{end+1} = 'SOC';
 title('SOC & Active Power', 'FontName', FONT_NAME);
@@ -387,30 +415,30 @@ yyaxis left; ax.YColor = COLOR_P_TOTAL; hold on;
 legH3 = gobjects(0); legT3 = {};
 
 ${is20PercentProject(project) ? `vavg = (vab + vbc + vca) / 3;
-pVavg = plot(t, vavg, '-', 'Color', COLOR_VAVG, 'LineWidth', LW_STANDARD);
+pVavg = plotContinuous(t, vavg, '-', 'Color', COLOR_VAVG, 'LineWidth', LW_STANDARD);
 ylabel('Vavg (kV)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(V_YLIM);
-legH3(end+1) = pVavg; legT3{end+1} = 'Vavg (kV)';` : `pVab = plot(t, vab, '-', 'Color', COLOR_VAB, 'LineWidth', LW_STANDARD);
-pVbc = plot(t, vbc, '-', 'Color', COLOR_VBC, 'LineWidth', LW_STANDARD);
-pVca = plot(t, vca, '-', 'Color', COLOR_VCA, 'LineWidth', LW_STANDARD);
+legH3(end+1) = pVavg; legT3{end+1} = 'Vavg (kV)';` : `pVab = plotContinuous(t, vab, '-', 'Color', COLOR_VAB, 'LineWidth', LW_STANDARD);
+pVbc = plotContinuous(t, vbc, '-', 'Color', COLOR_VBC, 'LineWidth', LW_STANDARD);
+pVca = plotContinuous(t, vca, '-', 'Color', COLOR_VCA, 'LineWidth', LW_STANDARD);
 ylabel('V (kV)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(V_YLIM);
 legH3 = [legH3, pVab, pVbc, pVca]; legT3 = [legT3, {'Vab', 'Vbc', 'Vca'}];`}
 if SHOW_GRID, grid on; end
 
 yyaxis right; ax.YColor = COLOR_Q_TOTAL; hold on;
-pQ = plot(t, qTotal, '-', 'Color', COLOR_Q_TOTAL, 'LineWidth', LW_THICK);
+pQ = plotContinuous(t, qTotal, '-', 'Color', COLOR_Q_TOTAL, 'LineWidth', LW_THICK);
 legH3(end+1) = pQ; legT3{end+1} = 'Q total';
 yDataQ = qTotal(:);
 
 ${project !== 'SNTV' ? `if any(~isnan(qBess) & abs(qBess) > 0.001) & any(~isnan(pBESS) & abs(pBESS) > 0.001)
-    pQBess = plot(t, qBess, '-', 'Color', COLOR_Q_BESS, 'LineWidth', LW_BOLD);
+    pQBess = plotContinuous(t, qBess, '-', 'Color', COLOR_Q_BESS, 'LineWidth', LW_BOLD);
     legH3(end+1) = pQBess; legT3{end+1} = 'Q (BESS) (MVar)';
     yDataQ = [yDataQ; qBess(:)];
 end` : ''}
 
 if any(~isnan(cmdQ))
-    pCmdQ = stairs(t, cmdQ, 'LineStyle', '--', 'Color', 'k', 'LineWidth', 2);
+    pCmdQ = stairs(t, cmdQ, 'LineStyle', ':', 'Color', 'k', 'LineWidth', 2);
     legH3(end+1) = pCmdQ; legT3{end+1} = 'Q command from NCC';
     yDataQ = [yDataQ; cmdQ(:)];
 end
@@ -477,30 +505,30 @@ ${commonHelpers}
 %% =========================================================================
 % EXTRACT PLANT DATA
 %% =========================================================================
-pTotal = data.pTotal.${pk};
+pTotal = round(data.pTotal.${pk}, 2);
 if isfield(data, 'pPccPVS')
-    pPccPVS = data.pPccPVS.${pk};
-    pPV = data.pPV.${pk};
-    pBESS = data.pBESS.${pk};
+    pPccPVS = round(data.pPccPVS.${pk}, 2);
+    pPV = round(data.pPV.${pk}, 2);
+    pBESS = round(data.pBESS.${pk}, 2);
 else
     pPccPVS = nan(size(pTotal));
     pPV = nan(size(pTotal));
     pBESS = nan(size(pTotal));
 end
 if isfield(data, 'qBess')
-    qBess = data.qBess.${pk};
+    qBess = round(data.qBess.${pk}, 2);
 else
     qBess = nan(size(pTotal));
 end
 freq = data.freq.${pk};
-cmdP = data.cmdP.${pk};
-remoteP = data.remoteP.${pk};
-soc = data.soc.${pk};
-vab = data.vab.${pk};
-vbc = data.vbc.${pk};
-vca = data.vca.${pk};
-qTotal = data.qTotal.${pk};
-cmdQ = data.cmdQ.${pk};
+cmdP = round(data.cmdP.${pk}, 2);
+remoteP = round(data.remoteP.${pk}, 2);
+soc = round(data.soc.${pk}, 1);
+vab = round(data.vab.${pk}, 2);
+vbc = round(data.vbc.${pk}, 2);
+vca = round(data.vca.${pk}, 2);
+qTotal = round(data.qTotal.${pk}, 2);
+cmdQ = round(data.cmdQ.${pk}, 2);
 
 % Determine active power to use
 if any(~isnan(pPccPVS) & abs(pPccPVS) > 0.001)
@@ -514,13 +542,13 @@ end
 %% =========================================================================
 ax = nexttile; axs = [axs, ax];
 yyaxis left; ax.YColor = COLOR_P_TOTAL;
-plot(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
+plotContinuous(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
 ylabel('P (MW)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(centeredYLim(pPlot, P_CENTER_MW, MARGIN_FACTOR));
 if SHOW_GRID, grid on; end
 
 yyaxis right; ax.YColor = COLOR_FREQ;
-plot(t, freq, '-', 'Color', COLOR_FREQ, 'LineWidth', LW_BOLD);
+plotContinuous(t, freq, '-', 'Color', COLOR_FREQ, 'LineWidth', LW_BOLD);
 ylabel('F (Hz)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(centeredYLim(freq, F_CENTER_HZ, MARGIN_FACTOR));
 title('Frequency & Active Power', 'FontName', FONT_NAME);
@@ -536,17 +564,17 @@ yyaxis left; ax.YColor = COLOR_P_TOTAL; hold on;
 legH = gobjects(0); legT = {};
 yDataAll = pPlot(:);
 
-pPlotLine = plot(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
+pPlotLine = plotContinuous(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
 legH(end+1) = pPlotLine; legT{end+1} = 'P total';
 
 if any(~isnan(pPV) & abs(pPV) > 0.001)
-    pPVPlot = plot(t, pPV, '-', 'Color', COLOR_P_PV, 'LineWidth', LW_BOLD);
+    pPVPlot = plotContinuous(t, pPV, '-', 'Color', COLOR_P_PV, 'LineWidth', LW_BOLD);
     legH(end+1) = pPVPlot; legT{end+1} = 'P (PV) (MW)';
     yDataAll = [yDataAll; pPV(:)];
 end
 
 if any(~isnan(pBESS) & abs(pBESS) > 0.001)
-    pBESSPlot = plot(t, pBESS, '-', 'Color', COLOR_P_BESS, 'LineWidth', LW_BOLD);
+    pBESSPlot = plotContinuous(t, pBESS, '-', 'Color', COLOR_P_BESS, 'LineWidth', LW_BOLD);
     legH(end+1) = pBESSPlot; legT{end+1} = 'P (BESS) (MW)';
     yDataAll = [yDataAll; pBESS(:)];
 end
@@ -557,7 +585,7 @@ if any(~isnan(cmdP))
     yDataAll = [yDataAll; cmdP(:)];
 end
 if any(~isnan(remoteP))
-    pRem = plot(t, remoteP, '-', 'LineWidth', LW_CMD, 'Color', COLOR_REMOTE_P);
+    pRem = plotContinuous(t, remoteP, '-', 'LineWidth', LW_CMD, 'Color', COLOR_REMOTE_P);
     legH(end+1) = pRem; legT{end+1} = 'Remote Active Power';
     yDataAll = [yDataAll; remoteP(:)];
 end
@@ -566,7 +594,7 @@ ylim(centeredYLim(yDataAll, P_CENTER_MW, MARGIN_FACTOR));
 if SHOW_GRID, grid on; end
 
 yyaxis right; ax.YColor = COLOR_SOC;
-pSOC = plot(t, soc, '-', 'Color', COLOR_SOC, 'LineWidth', LW_THICK);
+pSOC = plotContinuous(t, soc, '-', 'Color', COLOR_SOC, 'LineWidth', LW_THICK);
 ylabel('SOC (%)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS);
 legH(end+1) = pSOC; legT{end+1} = 'SOC';
 title('SOC & Active Power', 'FontName', FONT_NAME);
@@ -582,30 +610,30 @@ yyaxis left; ax.YColor = COLOR_P_TOTAL; hold on;
 legH3 = gobjects(0); legT3 = {};
 
 ${is20PercentProject(project) ? `vavg = (vab + vbc + vca) / 3;
-pVavg = plot(t, vavg, '-', 'Color', COLOR_VAVG, 'LineWidth', LW_STANDARD);
+pVavg = plotContinuous(t, vavg, '-', 'Color', COLOR_VAVG, 'LineWidth', LW_STANDARD);
 ylabel('Vavg (kV)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(V_YLIM);
-legH3(end+1) = pVavg; legT3{end+1} = 'Vavg (kV)';` : `pVab = plot(t, vab, '-', 'Color', COLOR_VAB, 'LineWidth', LW_STANDARD);
-pVbc = plot(t, vbc, '-', 'Color', COLOR_VBC, 'LineWidth', LW_STANDARD);
-pVca = plot(t, vca, '-', 'Color', COLOR_VCA, 'LineWidth', LW_STANDARD);
+legH3(end+1) = pVavg; legT3{end+1} = 'Vavg (kV)';` : `pVab = plotContinuous(t, vab, '-', 'Color', COLOR_VAB, 'LineWidth', LW_STANDARD);
+pVbc = plotContinuous(t, vbc, '-', 'Color', COLOR_VBC, 'LineWidth', LW_STANDARD);
+pVca = plotContinuous(t, vca, '-', 'Color', COLOR_VCA, 'LineWidth', LW_STANDARD);
 ylabel('V (kV)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(V_YLIM);
 legH3 = [legH3, pVab, pVbc, pVca]; legT3 = [legT3, {'Vab', 'Vbc', 'Vca'}];`}
 if SHOW_GRID, grid on; end
 
 yyaxis right; ax.YColor = COLOR_Q_TOTAL; hold on;
-pQ = plot(t, qTotal, '-', 'Color', COLOR_Q_TOTAL, 'LineWidth', LW_THICK);
+pQ = plotContinuous(t, qTotal, '-', 'Color', COLOR_Q_TOTAL, 'LineWidth', LW_THICK);
 legH3(end+1) = pQ; legT3{end+1} = 'Q total';
 yDataQ = qTotal(:);
 
 ${project !== 'SNTV' ? `if any(~isnan(qBess) & abs(qBess) > 0.001) & any(~isnan(pBESS) & abs(pBESS) > 0.001)
-    pQBess = plot(t, qBess, '-', 'Color', COLOR_Q_BESS, 'LineWidth', LW_BOLD);
+    pQBess = plotContinuous(t, qBess, '-', 'Color', COLOR_Q_BESS, 'LineWidth', LW_BOLD);
     legH3(end+1) = pQBess; legT3{end+1} = 'Q (BESS) (MVar)';
     yDataQ = [yDataQ; qBess(:)];
 end` : ''}
 
 if any(~isnan(cmdQ))
-    pCmdQ = stairs(t, cmdQ, 'LineStyle', '--', 'Color', 'k', 'LineWidth', 2);
+    pCmdQ = stairs(t, cmdQ, 'LineStyle', ':', 'Color', 'k', 'LineWidth', 2);
     legH3(end+1) = pCmdQ; legT3{end+1} = 'Q command from NCC';
     yDataQ = [yDataQ; cmdQ(:)];
 end
@@ -641,19 +669,19 @@ SOC_LOW_rng  = [4.9  5.3 ];
 % PLANT: ${pk}
 %% =========================================================================
 % Extract plant data
-pTotal = data.pTotal.${pk};
+pTotal = round(data.pTotal.${pk}, 2);
 if isfield(data, 'pPccPVS')
-    pPccPVS = data.pPccPVS.${pk};
-    pPV = data.pPV.${pk};
-    pBESS = data.pBESS.${pk};
+    pPccPVS = round(data.pPccPVS.${pk}, 2);
+    pPV = round(data.pPV.${pk}, 2);
+    pBESS = round(data.pBESS.${pk}, 2);
 else
     pPccPVS = nan(size(pTotal));
     pPV = nan(size(pTotal));
     pBESS = nan(size(pTotal));
 end
-soc = data.soc.${pk};
-cmdP = data.cmdP.${pk};
-remoteP = data.remoteP.${pk};
+soc = round(data.soc.${pk}, 1);
+cmdP = round(data.cmdP.${pk}, 2);
+remoteP = round(data.remoteP.${pk}, 2);
 
 % Determine active power to use
 if any(~isnan(pPccPVS) & abs(pPccPVS) > 0.001)
@@ -668,17 +696,17 @@ yyaxis left; ax.YColor = COLOR_P_TOTAL; hold on;
 legH = gobjects(0); legT = {};
 yDataAll = pPlot(:);
 
-pPlotLine = plot(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
+pPlotLine = plotContinuous(t, pPlot, '-', 'Color', COLOR_P_TOTAL, 'LineWidth', LW_STANDARD);
 legH(end+1) = pPlotLine; legT{end+1} = 'P total';
 
 if any(~isnan(pPV) & abs(pPV) > 0.001)
-    pPVPlot = plot(t, pPV, '-', 'Color', COLOR_P_PV, 'LineWidth', LW_BOLD);
+    pPVPlot = plotContinuous(t, pPV, '-', 'Color', COLOR_P_PV, 'LineWidth', LW_BOLD);
     legH(end+1) = pPVPlot; legT{end+1} = 'P (PV) (MW)';
     yDataAll = [yDataAll; pPV(:)];
 end
 
 if any(~isnan(pBESS) & abs(pBESS) > 0.001)
-    pBESSPlot = plot(t, pBESS, '-', 'Color', COLOR_P_BESS, 'LineWidth', LW_BOLD);
+    pBESSPlot = plotContinuous(t, pBESS, '-', 'Color', COLOR_P_BESS, 'LineWidth', LW_BOLD);
     legH(end+1) = pBESSPlot; legT{end+1} = 'P (BESS) (MW)';
     yDataAll = [yDataAll; pBESS(:)];
 end
@@ -689,7 +717,7 @@ if any(~isnan(cmdP))
     yDataAll = [yDataAll; cmdP(:)];
 end
 if any(~isnan(remoteP))
-    pRem = plot(t, remoteP, '-', 'LineWidth', LW_CMD, 'Color', COLOR_REMOTE_P);
+    pRem = plotContinuous(t, remoteP, '-', 'LineWidth', LW_CMD, 'Color', COLOR_REMOTE_P);
     legH(end+1) = pRem; legT{end+1} = 'Remote Active Power';
     yDataAll = [yDataAll; remoteP(:)];
 end
@@ -698,7 +726,7 @@ ylim(centeredYLim(yDataAll, P_CENTER_MW, MARGIN_FACTOR));
 if SHOW_GRID, grid on; end
 
 yyaxis right; ax.YColor = COLOR_SOC; hold on;
-pSOC = plot(t, soc, '-', 'Color', COLOR_SOC, 'LineWidth', LW_THICK);
+pSOC = plotContinuous(t, soc, '-', 'Color', COLOR_SOC, 'LineWidth', LW_THICK);
 ylabel('SOC (%)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS);
 legH(end+1) = pSOC; legT{end+1} = 'SOC';
 
@@ -760,12 +788,32 @@ try
     plants.forEach((pk) => {
       script += `    if isfield(data, 'dailyCycle') && isfield(data.dailyCycle, '${pk}')
         val = data.dailyCycle.${pk};
-        cycleLines{end+1} = ['  ${plantNameMap[pk]}: ', sprintf('%.4f', val)];
-    end\n`;
+        if val < 0.5
+            st = '\\color{red}\\bullet \\color{black}Take action';
+        elseif val < 0.8
+            st = '\\color[rgb]{0.92,0.70,0.03}\\bullet \\color{black}Warning';
+        elseif strcmp('${project}', 'SNTL400') && val > 1
+            st = '\\color{red}\\bullet \\color{black}Alert';
+        else
+            st = '\\color[rgb]{0.13,0.77,0.37}\\bullet \\color{black}Normal';
+        end
+        cycleLines{end+1} = ['  ${plantNameMap[pk]}: ', sprintf('%.4f', val), ' -> ', st];
+    end
+`;
     });
     script += `
     if isfield(data, 'avgDailyCycle')
-        cycleLines{end+1} = ['  Average: ', sprintf('%.4f', data.avgDailyCycle)];
+        val = data.avgDailyCycle;
+        if val < 0.5
+            st = '\\color{red}\\bullet \\color{black}Take action';
+        elseif val < 0.8
+            st = '\\color[rgb]{0.92,0.70,0.03}\\bullet \\color{black}Warning';
+        elseif strcmp('${project}', 'SNTL400') && val > 1
+            st = '\\color{red}\\bullet \\color{black}Alert';
+        else
+            st = '\\color[rgb]{0.13,0.77,0.37}\\bullet \\color{black}Normal';
+        end
+        cycleLines{end+1} = ['  Average: ', sprintf('%.4f', val), ' -> ', st];
     end
 
     totalCycleLines = {['Plant Total Cycle (', dateStrPrint, '):']};
@@ -819,9 +867,9 @@ qTotal = data.qTotal.${pk};
 cmdQ = data.cmdQ.${pk};
 
 yyaxis left; ax.YColor = COLOR_P_TOTAL; hold on;
-pVab = plot(t, vab, '-', 'Color', COLOR_VAB, 'LineWidth', LW_STANDARD);
-pVbc = plot(t, vbc, '-', 'Color', COLOR_VBC, 'LineWidth', LW_STANDARD);
-pVca = plot(t, vca, '-', 'Color', COLOR_VCA, 'LineWidth', LW_STANDARD);
+pVab = plotContinuous(t, vab, '-', 'Color', COLOR_VAB, 'LineWidth', LW_STANDARD);
+pVbc = plotContinuous(t, vbc, '-', 'Color', COLOR_VBC, 'LineWidth', LW_STANDARD);
+pVca = plotContinuous(t, vca, '-', 'Color', COLOR_VCA, 'LineWidth', LW_STANDARD);
 ylabel('V (kV)', 'FontName', FONT_NAME, 'FontSize', FONT_SIZE_AXIS); 
 ylim(V_YLIM);
 if SHOW_GRID, grid on; end
@@ -829,12 +877,12 @@ if SHOW_GRID, grid on; end
 yyaxis right; ax.YColor = COLOR_Q_TOTAL; hold on;
 legH = [pVab, pVbc, pVca]; legT = {'Vab', 'Vbc', 'Vca'};
 
-pQ = plot(t, qTotal, '-', 'Color', COLOR_Q_TOTAL, 'LineWidth', LW_THICK);
+pQ = plotContinuous(t, qTotal, '-', 'Color', COLOR_Q_TOTAL, 'LineWidth', LW_THICK);
 legH(end+1) = pQ; legT{end+1} = 'Q total';
 yDataQ = qTotal(:);
 
 if any(~isnan(cmdQ))
-    pCmdQ = stairs(t, cmdQ, 'LineStyle', '--', 'Color', 'k', 'LineWidth', 2);
+    pCmdQ = stairs(t, cmdQ, 'LineStyle', ':', 'Color', 'k', 'LineWidth', 2);
     legH(end+1) = pCmdQ; legT{end+1} = 'Q command from NCC';
     yDataQ = [yDataQ; cmdQ(:)];
 end

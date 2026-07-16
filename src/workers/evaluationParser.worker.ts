@@ -1,3 +1,4 @@
+/// <reference lib="webworker" />
 import { parseCycleExcelFile, buildPlantCycleTableJs } from '../lib/cycle-utils';
 const _MON: Record<string, number> = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
 function _validDate(y: number, mo: number, d: number) { return y >= 2000 && y <= 2100 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31; }
@@ -68,10 +69,6 @@ const forwardFillArray = (arr: number[]) => {
     } else {
       last = arr[i];
     }
-  }
-  const firstIdx = arr.findIndex((v) => !isNaN(v));
-  if (firstIdx > 0) {
-    for (let i = 0; i < firstIdx; i++) arr[i] = arr[firstIdx];
   }
 };
 
@@ -303,22 +300,16 @@ self.onmessage = async (event) => {
           if (isNCC) {
             const p1 = safeNum(row[nccP1Idx]);
             const q1 = safeNum(row[nccQ1Idx]);
-            const s1 = safeNum(row[nccSOC1Idx]);
             const p2 = safeNum(row[nccP2Idx]);
             const q2 = safeNum(row[nccQ2Idx]);
-            const s2 = safeNum(row[nccSOC2Idx]);
             const p3 = safeNum(row[nccP3Idx]);
             const q3 = safeNum(row[nccQ3Idx]);
-            const s3 = safeNum(row[nccSOC3Idx]);
             if (!isNaN(p1)) parsedData.cmdP.plant1[ti] = p1;
             if (!isNaN(q1)) parsedData.cmdQ.plant1[ti] = q1;
-            if (!isNaN(s1)) parsedData.soc.plant1[ti]  = s1;
             if (!isNaN(p2)) parsedData.cmdP.plant2[ti] = p2;
             if (!isNaN(q2)) parsedData.cmdQ.plant2[ti] = q2;
-            if (!isNaN(s2)) parsedData.soc.plant2[ti]  = s2;
             if (!isNaN(p3)) parsedData.cmdP.plant3[ti] = p3;
             if (!isNaN(q3)) parsedData.cmdQ.plant3[ti] = q3;
-            if (!isNaN(s3)) parsedData.soc.plant3[ti]  = s3;
           }
         }
       }

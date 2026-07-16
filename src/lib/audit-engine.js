@@ -927,16 +927,19 @@ const HC_PROJECTS = [
     { name: 'Plant_03', expected: { POC: 3, ESS: 0, SmartLogger: 0, ESR: 0, ESM: 0 } },
   ]},
   { id: 'SNTB', label: 'SNTB 30MWH', defaultPlants: [
-    { name: 'Plant_01', expected: { POC: 3, ESS: 50, SmartLogger: 13, ESR: 300, ESM: 3400 } },
+    { name: 'Plant_01', expected: { POC: 2, ESS: 15, SmartLogger: 5, ESR: 90, ESM: 1890, PCS: 150 } },
   ]},
   { id: 'SNTV', label: 'SNTV 12MWH', defaultPlants: [
-    { name: 'Plant_01', expected: { POC: 3, ESS: 28, SmartLogger: 8, ESR: 120, ESM: 960 } },
+    { name: 'Plant_01', expected: { POC: 3, ESS: 6, SmartLogger: 2, ESR: 36, ESM: 756, PCS: 60 } },
   ]},
-  { id: 'SNTD_DMF', label: 'SNTD-DMF 18MWH', defaultPlants: [
-    { name: 'Plant_01', expected: { POC: 3, ESS: 30, SmartLogger: 8, ESR: 180, ESM: 1440 } },
+  { id: 'SNTD', label: 'SNTD', defaultPlants: [
+    { name: 'Plant_01', expected: { POC: 0, ESS: 6, SmartLogger: 3, ESR: 36, ESM: 756, PCS: 74 } },
+  ]},
+  { id: 'DMF', label: 'DMF', defaultPlants: [
+    { name: 'Plant_01', expected: { POC: 0, ESS: 3, SmartLogger: 1, ESR: 18, ESM: 378, PCS: 30 } },
   ]},
   { id: 'SNTZ', label: 'SNTZ 3MWH', defaultPlants: [
-    { name: 'Plant_01', expected: { POC: 3, ESS: 5, SmartLogger: 2, ESR: 30, ESM: 240 } },
+    { name: 'Plant_01', expected: { POC: 3, ESS: 2, SmartLogger: 1, ESR: 9, ESM: 189, PCS: 14 } },
   ]},
   { id: 'MSGP', label: 'MSGP 14MWH', defaultPlants: [
     { name: 'Plant_01', expected: { POC: 3, ESS: 74, SmartLogger: 4, ESR: 344, ESM: 1152 } },

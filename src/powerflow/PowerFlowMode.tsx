@@ -50,7 +50,6 @@ import {
 import { GoogleGenAI } from "@google/genai";
 import { AIAgentPage } from "./pages/AIAgentPage";
 import { DailyEvaluationPage } from "./pages/DailyEvaluationPage";
-import { ImportMatCodePage } from "./pages/ImportMatCodePage";
 import { MatFigExportPage } from "./pages/MatFigExportPage";
 import { ValidationDebug } from "./components/ValidationDebug";
 import { useAIContext } from '../lib/ai-context';
@@ -459,7 +458,6 @@ export function PowerFlowMode() {
 
             <div className="flex flex-col">
               <NavItem icon={<BarChart3 size={14} />} label="Daily Evaluation" active={activeTab === 'ess20'} onClick={() => setActiveTab('ess20')} collapsed={isSidebarCollapsed} />
-              <NavItem icon={<FileCode size={14} />} label="Import MATCODE" active={activeTab === 'matcode'} onClick={() => setActiveTab('matcode')} collapsed={isSidebarCollapsed} />
               <NavItem icon={<Bot size={14} />} label="AI Agent" active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} collapsed={isSidebarCollapsed} />
             </div>
 
@@ -675,18 +673,13 @@ export function PowerFlowMode() {
             <DailyEvaluationPage theme={theme} project={project} active={activeTab === 'ess20'} progress={progress} setProgress={setProgress} auditStateVersion={auditStateVersion} />
           </div>
 
-          {/* Import MATCODE Tab Panel */}
-          <div className={cn("flex-1 min-h-0 flex-col", activeTab === 'matcode' ? "flex" : "hidden")}>
-            <ImportMatCodePage theme={theme} project={project} active={activeTab === 'matcode'} />
-          </div>
-
           {/* AI Agent Tab Panel */}
           <div className={cn("flex-1 min-h-0 flex-col", activeTab === 'ai' ? "flex" : "hidden")}>
             <AIAgentPage />
           </div>
 
           {/* Validation Overview Dashboard Fallback */}
-          {activeTab !== 'ess20' && activeTab !== 'matcode' && activeTab !== 'export' && activeTab !== 'ai' && (
+          {activeTab !== 'ess20' && activeTab !== 'export' && activeTab !== 'ai' && (
             (() => {
               const currentPlants = hcByProject[project] || [];
               let totPoc = 0, totEss = 0, totSl = 0, totPcs = 0;

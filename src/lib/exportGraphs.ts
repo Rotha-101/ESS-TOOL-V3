@@ -43,8 +43,24 @@ export const exportAllGraphsToZip = async (
     const dash = graphConfig.lineDash[idx] ?? 'solid';
     const visible = graphConfig.traceVisible[idx] !== false;
     const modeBase = graphConfig.showMarkers ? 'lines+markers' : 'lines';
+
+    let newY = trace.y;
+    let hoverTpl = trace.hovertemplate;
+    if (trace.name && newY && Array.isArray(newY)) {
+      const tName = trace.name.toLowerCase();
+      if (tName.includes('soc')) {
+         newY = newY.map((v: any) => (v != null && typeof v === 'number' && !isNaN(v)) ? Number(v.toFixed(1)) : v);
+         hoverTpl = '(%{x}, %{y:.1f})';
+      } else if (tName.includes('p ') || tName.startsWith('p ') || tName.includes('active power') || tName.includes('q ') || tName.startsWith('q ') || tName.includes('reactive power') || tName.includes('q total') || tName.includes('q (bess)')) {
+         newY = newY.map((v: any) => (v != null && typeof v === 'number' && !isNaN(v)) ? Number(v.toFixed(2)) : v);
+         hoverTpl = '(%{x}, %{y:.2f})';
+      }
+    }
+
     return {
       ...trace,
+      y: newY,
+      ...(hoverTpl || trace.hovertemplate ? { hovertemplate: hoverTpl || trace.hovertemplate } : {}),
       x: timeX,
       visible: visible ? true : 'legendonly',
       mode: modeBase,

@@ -59,7 +59,6 @@ import { CycleCalculation } from './components/CycleCalculation';
 import { DailyEvaluationGraph } from './components/DailyEvaluationGraph';
 import { SettingsWindow } from './components/SettingsWindow';
 import { GlobalProgressModal } from './components/GlobalProgressModal';
-import { ImportMatCodePage } from './powerflow/pages/ImportMatCodePage';
 
 export { DailyEvaluationGraph } from './components/DailyEvaluationGraph';
 
@@ -561,7 +560,7 @@ export default function App() {
           <img src="./SNT.png" alt="SNT Logo" className="h-4 object-contain" style={{ mixBlendMode: 'screen' }} />
           <div className="h-4 w-px bg-white/20"></div>
           <h1 className="font-bold tracking-tight text-sm text-white flex items-center">
-            <span>EMS TOOLBOX <span className="font-normal text-white/50">ENTERPRISE PLATFORM v0.1.1</span></span>
+            <span>Data Visualization Tool</span>
             <span className="font-normal text-[9px] tracking-widest text-white/40 ml-3 pl-3 border-l border-white/20">DEVELOPED BY PERFORMANCE AND ANALYSIS OFFICE</span>
           </h1>
         </div>
@@ -606,7 +605,6 @@ export default function App() {
               <NavItem icon={<Activity size={14} />} label="Validation File Debug" active={activeTab === 'signal'} onClick={() => switchTab('signal')} />
               <NavItem icon={<Zap size={14} />} label="Cycle Calculation" active={activeTab === 'power'} onClick={() => switchTab('power')} />
               <NavItem icon={<Battery size={14} />} label="Daily Evaluation Graph" active={activeTab === 'soc'} onClick={() => switchTab('soc')} />
-              <NavItem icon={<FileCode size={14} />} label="Import MATCODE" active={activeTab === 'matcode'} onClick={() => switchTab('matcode')} />
               <NavItem icon={<Download size={14} />} label="Report Export" active={activeTab === 'export'} onClick={() => switchTab('export')} />
               <NavItem icon={<Bot size={14} />} label="AI Agent" active={activeTab === 'ai'} onClick={() => switchTab('ai')} />
             </div>
@@ -754,8 +752,6 @@ export default function App() {
                 <CycleCalculation project={project} theme={theme} />
               ) : activeTab === 'soc' ? (
                 <DailyEvaluationGraph theme={theme} project={project} onNavigateToAI={() => switchTab('ai')} />
-              ) : activeTab === 'matcode' ? (
-                <ImportMatCodePage theme={theme as 'dark' | 'light'} project={project} active={true} />
               ) : activeTab === 'export' ? (
                 (() => {
                   const currentPlants = hcByProject[project] || [];
@@ -811,6 +807,36 @@ export default function App() {
                               </button>
                             </div>
                             <div className="pb-3 flex gap-3">
+                              <button
+                                onClick={() => {
+                                  if (!(window as any).isGraphMounted) {
+                                    alert("Please switch to GRAPH PREVIEW first before exporting HTML graphs.");
+                                    return;
+                                  }
+                                  document.dispatchEvent(new CustomEvent('export-html-single'));
+                                }}
+                                className="flex items-center justify-center gap-2 px-6 py-2 rounded transition-all bg-green-600/10 text-green-500 border border-green-500/20 hover:bg-green-600 hover:text-white shadow-sm font-bold group"
+                              >
+                                <Download size={14} className="group-hover:-translate-y-1 transition-transform" />
+                                <span className="text-[10px] uppercase tracking-wider">
+                                  Export as HTML
+                                </span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (!(window as any).isGraphMounted) {
+                                    alert("Please switch to GRAPH PREVIEW first before exporting HTML graphs.");
+                                    return;
+                                  }
+                                  document.dispatchEvent(new CustomEvent('export-html-all'));
+                                }}
+                                className="flex items-center justify-center gap-2 px-6 py-2 rounded transition-all bg-blue-600/10 text-blue-500 border border-blue-500/20 hover:bg-blue-600 hover:text-white shadow-sm font-bold group"
+                              >
+                                <Download size={14} className="group-hover:-translate-y-1 transition-transform" />
+                                <span className="text-[10px] uppercase tracking-wider">
+                                  Export All Graph as HTML
+                                </span>
+                              </button>
                               <button
                                 onClick={() => {
                                   handleExportMatlab();

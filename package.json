@@ -7,7 +7,7 @@
   "type": "module",
   "build": {
     "appId": "com.esstoolbox.v1.rotha",
-    "productName": "ESS Toolbox V1",
+    "productName": "Data Visualization Tool",
     "directories": {
       "output": "Release"
     },
@@ -29,7 +29,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ESS Toolbox",
+      "shortcutName": "Data Visualization Tool",
       "license": "build/intro.md"
     }
   },
@@ -56,6 +56,7 @@
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "fflate": "^0.8.3",
+    "jsdom": "^29.1.1",
     "localforage": "^1.10.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",

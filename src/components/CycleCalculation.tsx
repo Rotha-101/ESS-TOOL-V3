@@ -783,42 +783,46 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
                 >
                   Daily SWG Cycle Result
                 </button>
-                <button
-                  onClick={() => setActivePlantTab('p1')}
-                  className={cn(
-                    "px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono border transition-all",
-                    activePlantTab === 'p1'
-                      ? "bg-accent-blue text-foreground border-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.25)]"
-                      : "bg-foreground/5 border-foreground/10 text-foreground/60 hover:text-foreground hover:bg-foreground/10"
-                  )}
-                >
-                  SWG01 (Plant 01)
-                </button>
-                {!isBessProject && (
-                  <button
-                    onClick={() => setActivePlantTab('p2')}
-                    className={cn(
-                      "px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono border transition-all",
-                      activePlantTab === 'p2'
-                        ? "bg-accent-blue text-foreground border-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.25)]"
-                        : "bg-foreground/5 border-foreground/10 text-foreground/60 hover:text-foreground hover:bg-foreground/10"
+                {!project.startsWith('SNTL') && (
+                  <>
+                    <button
+                      onClick={() => setActivePlantTab('p1')}
+                      className={cn(
+                        "px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono border transition-all",
+                        activePlantTab === 'p1'
+                          ? "bg-accent-blue text-foreground border-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.25)]"
+                          : "bg-foreground/5 border-foreground/10 text-foreground/60 hover:text-foreground hover:bg-foreground/10"
+                      )}
+                    >
+                      SWG01 (Plant 01)
+                    </button>
+                    {!isBessProject && (
+                      <button
+                        onClick={() => setActivePlantTab('p2')}
+                        className={cn(
+                          "px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono border transition-all",
+                          activePlantTab === 'p2'
+                            ? "bg-accent-blue text-foreground border-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.25)]"
+                            : "bg-foreground/5 border-foreground/10 text-foreground/60 hover:text-foreground hover:bg-foreground/10"
+                        )}
+                      >
+                        SWG02 (Plant 02)
+                      </button>
                     )}
-                  >
-                    SWG02 (Plant 02)
-                  </button>
-                )}
-                {getProjectPlants(project).length >= 3 && (
-                  <button
-                    onClick={() => setActivePlantTab('p3')}
-                    className={cn(
-                      "px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono border transition-all",
-                      activePlantTab === 'p3'
-                        ? "bg-accent-blue text-foreground border-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.25)]"
-                        : "bg-foreground/5 border-foreground/10 text-foreground/60 hover:text-foreground hover:bg-foreground/10"
+                    {getProjectPlants(project).length >= 3 && (
+                      <button
+                        onClick={() => setActivePlantTab('p3')}
+                        className={cn(
+                          "px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono border transition-all",
+                          activePlantTab === 'p3'
+                            ? "bg-accent-blue text-foreground border-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.25)]"
+                            : "bg-foreground/5 border-foreground/10 text-foreground/60 hover:text-foreground hover:bg-foreground/10"
+                        )}
+                      >
+                        SWG03 (Plant 03)
+                      </button>
                     )}
-                  >
-                    SWG03 (Plant 03)
-                  </button>
+                  </>
                 )}
 
                 <Button
