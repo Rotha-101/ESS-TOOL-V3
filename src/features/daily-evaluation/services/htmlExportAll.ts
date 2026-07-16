@@ -366,6 +366,16 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
     let pinnedPoints = ${pinnedJson};
     const legendPositions = {};
 
+    // Daily-cycle status label (was missing from the exported page, which made
+    // every figure using the cycle info boxes throw a ReferenceError and
+    // render blank). Mirrors utils/status.tsx getStatusHTML.
+    const getStatusHTML = (val, prj) => {
+      if (val < 0.5) return '<span style="color:#DC2626">\\u{1F534} Take action</span>';
+      if (val < 0.8) return '<span style="color:#EAB308">\\u{1F7E1} Warning</span>';
+      if (prj === 'SNTL400' && val > 1) return '<span style="color:#DC2626">\\u{1F534} Alert</span>';
+      return '<span style="color:#22C55E">\\u{1F7E2} Normal</span>';
+    };
+
     const metricLabels = {
       'f_p': 'Frequency & Active Power (All Plants)',
       'soc_p': 'SOC & Active Power (All Plants)',
