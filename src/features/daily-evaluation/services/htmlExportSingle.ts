@@ -626,7 +626,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
             const prj = typeof project !== 'undefined' ? project : 'Unknown';
             const getStatus = (val) => getStatusHTML(val, prj);
 
-            if (i === 0) {
+            if (i === 0 && evalDataRaw.hasCycleData) {
               const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : 0;
               const lines = [
                 'Daily cycle (' + evalDataRaw.dataDate + '):',
@@ -639,6 +639,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
             }
 
             if (i === 1) {
+              if (evalDataRaw.hasCycleData) {
               const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : 0;
               const lines = [
                 'Plant Total Cycle (' + evalDataRaw.dataDate + '):',
@@ -648,6 +649,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
               if (hasPlant3) lines.push('Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6));
               lines.push('Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)));
               drawInfoBox(lines, 160, yOffset + 60, bgWhite, 0, lines.length - 1);
+              }
 
               if (evalDataRaw.deviations && evalDataRaw.deviations.highSOC) {
                 const devLines = [
@@ -1288,7 +1290,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
           ];
           const layoutSoc = getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'fig4_soc_' + pk);
-          if (evalDataRaw.dailyCycle && evalDataRaw.dailyCycle[pk]) {
+          if (evalDataRaw.hasCycleData && evalDataRaw.dailyCycle && evalDataRaw.dailyCycle[pk]) {
             layoutSoc.annotations = [{
               x: 0.99, y: 0.95, xref: 'paper', yref: 'paper', xanchor: 'right', yanchor: 'top',
               text: '<b>Daily cycle:</b> ' + Number(evalDataRaw.dailyCycle[pk].toFixed(4)) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle[pk], project),
@@ -1349,14 +1351,14 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
           const overlay = document.createElement('div');
           overlay.className = 'absolute top-10 left-16 z-20 bg-white/95 border border-blue-500/80 px-2 py-1 text-[7.5px] font-mono text-black shadow-sm rounded-sm pointer-events-none leading-relaxed flex flex-col max-w-[230px]';
           
-          if (statsIndex === 0) {
+          if (statsIndex === 0 && evalDataRaw.hasCycleData) {
             overlay.innerHTML = '<div class="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Daily cycle (' + evalDataRaw.dataDate + '):</div>' +
               '<div>Cycle_Plant 01 = ' + evalDataRaw.dailyCycle.plant1.toFixed(3) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant1, project) + '</div>' +
               (hasPlant2 ? '<div>Cycle_Plant 02 = ' + evalDataRaw.dailyCycle.plant2.toFixed(3) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant2, project) + '</div>' : '') +
               (hasPlant3 ? '<div>Cycle_Plant 03 = ' + evalDataRaw.dailyCycle.plant3.toFixed(3) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant3, project) + '</div>' : '') +
               '<div class="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Cycle_Average Daily Cycle = ' + Number(avgDaily.toFixed(4)) + ' -> ' + getStatusHTML(avgDaily, project) + '</div>';
             div.appendChild(overlay);
-          } else if (statsIndex === 1) {
+          } else if (statsIndex === 1 && evalDataRaw.hasCycleData) {
             overlay.innerHTML = '<div class="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Plant Total Cycle (' + evalDataRaw.dataDate + '):</div>' +
               '<div>Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6) + '</div>' +
               (hasPlant2 ? '<div>Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6) + '</div>' : '') +

@@ -45,6 +45,9 @@ export interface EvalData {
 
   dailyCycle: PlantValues;
   totalCycle: PlantValues;
+  /** True when cycle numbers came from real sources (ESS cycle files or
+   * cycle history); false/absent means estimates/mock fallbacks. */
+  hasCycleData?: boolean;
   avgDailyCycle?: number;
   avgTotalCycle?: number;
   dataDate?: string;

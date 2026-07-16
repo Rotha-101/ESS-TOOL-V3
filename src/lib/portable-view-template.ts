@@ -1126,7 +1126,7 @@ export function generatePortableViewHtml(
           const avgTotal = (evalDataRaw.avgTotalCycle != null && !isNaN(evalDataRaw.avgTotalCycle)) ? evalDataRaw.avgTotalCycle : (evalDataRaw.totalCycle.plant1 + (hasPlant2 ? evalDataRaw.totalCycle.plant2 : 0) + (hasPlant3 ? evalDataRaw.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : (hasPlant2 ? 2 : 1));
 
           const socLayout = getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'fig4_soc_' + pk);
-          socLayout.annotations = [
+          socLayout.annotations = !evalDataRaw.hasCycleData ? [] : [
             {
               x: 0.99, y: 0.95,
               xref: 'paper', yref: 'paper',
@@ -1187,7 +1187,7 @@ export function generatePortableViewHtml(
           div.className = 'h-[280px] w-full mb-4 relative';
           chartArea.appendChild(div);
 
-          if (statsIndex === 0 || (plants.length === 1 && statsIndex === 0)) {
+          if (evalDataRaw.hasCycleData && (statsIndex === 0 || (plants.length === 1 && statsIndex === 0))) {
             const overlay1 = document.createElement('div');
             overlay1.className = 'absolute top-10 left-16 z-20 bg-white/95 border border-blue-500/80 px-2 py-1 text-[7.5px] font-mono text-black shadow-sm rounded-sm draggable-stats cursor-move leading-relaxed flex flex-col max-w-[230px]';
             overlay1.innerHTML = '<div class="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Daily cycle (' + evalDataRaw.dataDate + '):</div>' +
@@ -1198,7 +1198,7 @@ export function generatePortableViewHtml(
             div.appendChild(overlay1);
           }
 
-          if (statsIndex === 1 || (plants.length === 1 && statsIndex === 0)) {
+          if (evalDataRaw.hasCycleData && (statsIndex === 1 || (plants.length === 1 && statsIndex === 0))) {
             const overlay2 = document.createElement('div');
             // Use left-16 if it's on a different panel, otherwise offset it to avoid overlap
             overlay2.className = (plants.length === 1) 

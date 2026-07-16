@@ -256,7 +256,7 @@ export const GraphPanels = React.memo(function GraphPanels({
 
     // Shared MATLAB Layout styler â€” now driven by graphConfig
     const getCycleAnnotations = (pk: 'plant1' | 'plant2' | 'plant3') => {
-      if (!evalData || !evalData.dailyCycle || !evalData.totalCycle || typeof evalData.dailyCycle[pk] !== 'number') return [];
+      if (!evalData || !evalData.hasCycleData || !evalData.dailyCycle || !evalData.totalCycle || typeof evalData.dailyCycle[pk] !== 'number') return [];
       return [{
         x: 0.99, y: 0.95,
         xref: 'paper', yref: 'paper',
@@ -740,6 +740,7 @@ export const GraphPanels = React.memo(function GraphPanels({
 
         const renderOverlay = () => {
           if (statsIndex === 1) {
+            if (!evalData.hasCycleData) return null;
             return (
               <DraggableOverlay initialX={64} initialY={40}>
                 <div className="bg-white/95 border border-blue-500/80 px-2 py-1 text-[7.5px] font-mono text-black shadow-sm rounded-sm leading-relaxed flex flex-col max-w-[190px]">
@@ -755,7 +756,7 @@ export const GraphPanels = React.memo(function GraphPanels({
           if (statsIndex === 2) {
             return (
               <>
-                <DraggableOverlay initialX={64} initialY={40}>
+                {evalData.hasCycleData && <DraggableOverlay initialX={64} initialY={40}>
                   <div className="bg-white/95 border border-blue-500/80 px-2 py-1 text-[7.5px] font-mono text-black shadow-sm rounded-sm leading-relaxed flex flex-col max-w-[210px]">
                     <div className="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Plant Total Cycle ({evalData.dataDate}):</div>
                     <div>Plant 01 Total Cycle = {evalData.totalCycle.plant1.toFixed(6)}</div>
@@ -763,7 +764,7 @@ export const GraphPanels = React.memo(function GraphPanels({
                     {hasPlant3 && <div>Plant 03 Total Cycle = {evalData.totalCycle.plant3.toFixed(6)}</div>}
                     <div className="font-bold text-blue-600 border-t border-gray-200 pt-0.5 mt-0.5">Average Total Plant Cycle = {Number(avgTotal.toFixed(6))}</div>
                   </div>
-                </DraggableOverlay>
+                </DraggableOverlay>}
                 <DraggableOverlay defaultCentered={true}>
                   <div className="bg-white/95 border border-blue-500/80 px-2 py-1 text-[7.5px] font-mono text-black shadow-sm rounded-sm leading-relaxed flex flex-col max-w-[230px]">
                     <div className="font-bold border-b border-gray-200 pb-0.5 mb-1 text-[8px]">Max deviation timings:</div>

@@ -590,6 +590,16 @@ export const parseEvaluationFiles = async (
           text: formatDev(lowDevData.devSec)
         }
       };
+      // True only when cycle numbers came from a real source (ESS daily-cycle
+      // spreadsheets or a matching CycleCalculation history entry). Otherwise
+      // dailyCycle/totalCycle hold power-curve estimates or mock fallbacks and
+      // the cycle info boxes must not present them as calculated values.
+      parsedData.hasCycleData = [
+        parsedDaily.plant1, parsedDaily.plant2, parsedDaily.plant3,
+        parsedTotals.plant1, parsedTotals.plant2, parsedTotals.plant3,
+        parsedAvgDaily, parsedAvgTotal,
+      ].some(v => !isNaN(v));
+
       console.log("DEBUG SNTV PARSED:", {
         pTotalCount: parsedData.pTotal.plant1.filter((v: number) => !isNaN(v)).length,
         pPccPVSCount: parsedData.pPccPVS.plant1.filter((v: number) => !isNaN(v)).length,

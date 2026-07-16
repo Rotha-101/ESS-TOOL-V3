@@ -653,7 +653,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
             const prj = typeof project !== 'undefined' ? project : 'Unknown';
             const getStatus = (val) => getStatusHTML(val, prj);
 
-            if (i === 0) {
+            if (i === 0 && evalDataRaw.hasCycleData) {
               const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : 0;
               const lines = [
                 'Daily cycle (' + evalDataRaw.dataDate + '):',
@@ -666,6 +666,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
             }
 
             if (i === 1) {
+              if (evalDataRaw.hasCycleData) {
               const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : 0;
               const lines = [
                 'Plant Total Cycle (' + evalDataRaw.dataDate + '):',
@@ -675,6 +676,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
               if (hasPlant3) lines.push('Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6));
               lines.push('Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)));
               drawInfoBox(lines, 160, yOffset + 60, bgWhite, 0, lines.length - 1);
+              }
 
               if (evalDataRaw.deviations && evalDataRaw.deviations.highSOC) {
                 const devLines = [
@@ -1312,7 +1314,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
             applyTrace({ y: evalDataRaw.soc?.[pk], type: 'scattergl', mode: 'lines', name: 'SOC', yaxis: 'y2', line: { color: '#D95319', width: 1.2 } }, 3)
           ];
           const layoutSoc = getMATLABLayout('SOC & Active Power', 'P (MW)', 'SOC (%)', undefined, undefined, 'fig4_soc_' + pk);
-          if (evalDataRaw.dailyCycle && evalDataRaw.dailyCycle[pk]) {
+          if (evalDataRaw.hasCycleData && evalDataRaw.dailyCycle && evalDataRaw.dailyCycle[pk]) {
             layoutSoc.annotations = [{
               x: 0.99, y: 0.95, xref: 'paper', yref: 'paper', xanchor: 'right', yanchor: 'top',
               text: '<b>Daily cycle:</b> ' + Number(evalDataRaw.dailyCycle[pk].toFixed(4)) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle[pk], project),
@@ -1372,7 +1374,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
 
           const boxAnnotations = [];
           
-          if (statsIndex === 0) {
+          if (statsIndex === 0 && evalDataRaw.hasCycleData) {
             boxAnnotations.push({
               x: 0.05, y: 0.95, xref: 'paper', yref: 'paper',
               xanchor: 'left', yanchor: 'top',
@@ -1387,7 +1389,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
               captureevents: true
             });
           } else if (statsIndex === 1) {
-            boxAnnotations.push({
+            if (evalDataRaw.hasCycleData) boxAnnotations.push({
               x: 0.05, y: 0.95, xref: 'paper', yref: 'paper',
               xanchor: 'left', yanchor: 'top',
               text: '<b>Plant Total Cycle (' + evalDataRaw.dataDate + '):</b><br>Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6) + (hasPlant2 ? '<br>Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6) : '') + (hasPlant3 ? '<br>Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6) : '') + '<br><span style="color: #2563EB"><b>Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)) + '</b></span>',
