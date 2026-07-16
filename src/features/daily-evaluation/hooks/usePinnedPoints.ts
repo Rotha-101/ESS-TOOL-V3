@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ActiveMetric, PinnedPoint } from '@/types/graph';
 
 // Pinned point annotations — click a data point to pin/unpin it.
@@ -13,16 +13,19 @@ export const usePinnedPoints = ({ initial, activeMetric, selectedPlant }: {
 
   const lastHoveredPtRef = useRef<any>(null);
 
-  const handleHover = (event: any, graphId: string) => {
+  // Handlers touch only refs and functional setState, so empty-dep
+  // useCallback is safe; stable identities keep GraphPanels' React.memo
+  // effective across unrelated parent re-renders.
+  const handleHover = useCallback((event: any, graphId: string) => {
     if (event && event.points && event.points.length > 0) {
       lastHoveredPtRef.current = { pt: event.points[0], graphId };
     }
-  };
-  const handleUnhover = () => {
+  }, []);
+  const handleUnhover = useCallback(() => {
     lastHoveredPtRef.current = null;
-  };
+  }, []);
 
-  const handleRelayout = (event: any, graphId: string) => {
+  const handleRelayout = useCallback((event: any, graphId: string) => {
     if (!event) return;
     const keys = Object.keys(event);
 
@@ -50,10 +53,10 @@ export const usePinnedPoints = ({ initial, activeMetric, selectedPlant }: {
       });
       return changed ? next : prev;
     });
-  };
+  }, []);
 
   const lastClickAnnotationTimeRef = useRef(0);
-  const handleClickAnnotation = (event: any, graphId: string) => {
+  const handleClickAnnotation = useCallback((event: any, graphId: string) => {
     const now = Date.now();
     if (now - lastClickAnnotationTimeRef.current < 300) {
       const clickedText = event.annotation.text;
@@ -61,7 +64,7 @@ export const usePinnedPoints = ({ initial, activeMetric, selectedPlant }: {
       setPinnedPoints(prev => prev.filter(p => !(p.graphId === graphId && p.text === clickedText && String(p.x) === String(clickedX))));
     }
     lastClickAnnotationTimeRef.current = now;
-  };
+  }, []);
 
   const handleDoubleClick = () => {
     if (!lastHoveredPtRef.current) return;
