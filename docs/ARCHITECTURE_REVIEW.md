@@ -3,7 +3,21 @@
 **Project:** ESS Toolbox (Data Visualization Tool)
 **Scope:** Pure refactor of `src/components/DailyEvaluationGraph.tsx` (6,146 lines) + project-wide debt audit
 **Date:** 2026-07-16
-**Status:** AWAITING APPROVAL — no code has been modified
+**Status:** EXECUTED 2026-07-16 on branch `refactor/daily-evaluation-graph` (11 commits, Phase 0–10).
+DailyEvaluationGraph.tsx (6,146 lines) → `src/features/daily-evaluation/` (25 modules; 687-line container).
+All moved bodies byte-diffed against git HEAD; `tsc --noEmit` and `vite build` green at every phase.
+Outcome deviations from the plan below:
+1. **HTML-template unification deferred** — a mechanical diff (`docs/template-drift.diff`) proved the two
+   inline templates drifted ~150 lines beyond the intended single/all difference (rounding, showlegend
+   rules, fig5 info-box implementation, theme reset). Unifying would either encode ~35 drift conditionals
+   or change exported output. Both exporters were moved verbatim to `services/htmlExportSingle.ts` /
+   `htmlExportAll.ts`; per-divergence behavior decisions needed before unification.
+2. **Toolbar/MetricSelector/Dropzone remain inline** in the container (687 lines vs the ~350 target);
+   GraphPanels + CustomizationDrawer were extracted. Optional follow-up granularity.
+3. **Data.zip kept on disk** (unrecoverable if deleted) but gitignored; regenerable scratch files deleted.
+4. New bug found during execution (add to Section 10 as **B14**): the exported HTML pages reference
+   `getStatusHTML(...)` in their embedded script (daily-cycle annotations / clipboard path) but never
+   define it — a latent ReferenceError in the exported viewers. Preserved as-is per the parity rule.
 
 ---
 
