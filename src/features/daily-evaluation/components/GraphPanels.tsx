@@ -319,7 +319,11 @@ export const GraphPanels = React.memo(function GraphPanels({
           yanchor: 'top' as const
         },
         autosize: true,
-        margin: { t: 50, r: 50, l: 50, b: 40 },
+        // Fixed margins sized for the rotated HH:MM:SS tick labels and axis
+        // titles. automargin is intentionally NOT used: it re-measures labels
+        // after the first paint and re-layouts the visible plot (the "settling
+        // animation" on figure switches) at the cost of extra full redraws.
+        margin: { t: 50, r: 55, l: 55, b: 62 },
         modebar: { orientation: 'h' },
         hovermode: 'closest',
         paper_bgcolor: bg,
@@ -336,7 +340,6 @@ export const GraphPanels = React.memo(function GraphPanels({
           tickangle: -45,
           tickfont: { color: fontColor, size: 9 },
           nticks: graphConfig.gridSize === 'small' ? 49 : graphConfig.gridSize === 'large' ? 13 : graphConfig.gridSize === 'xlarge' ? 7 : 25,
-          automargin: true,
           fixedrange: false,
           rangeslider: { visible: false },
         },
@@ -351,7 +354,6 @@ export const GraphPanels = React.memo(function GraphPanels({
           linewidth: 1.2,
           mirror: true,
           zeroline: false,
-          automargin: true,
           fixedrange: true,
           // autorange when no override â€” lets both axes zoom together
           ...(resolvedY1Range ? { range: resolvedY1Range } : { autorange: true }),
@@ -364,7 +366,6 @@ export const GraphPanels = React.memo(function GraphPanels({
             side: 'right' as const,
             showgrid: false,
             zeroline: false,
-            automargin: true,
             fixedrange: true,
             ...(resolvedY2Range ? { range: resolvedY2Range } : { autorange: true }),
           }
