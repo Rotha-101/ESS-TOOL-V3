@@ -1188,12 +1188,29 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
           div.style.position = 'relative';
           chartArea.appendChild(div);
 
+          // 20% projects show a single averaged voltage trace (Vavg), matching
+          // the fig4 "Reactive Power & Voltage" subplot and the in-app panels.
+          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+          let vTraces = [];
+          if (is20PercentRaw) {
+             const vavg = (evalDataRaw.vab?.[pk] || []).map((v, i) => {
+               if (v == null || isNaN(v)) return NaN;
+               const v2 = evalDataRaw.vbc?.[pk]?.[i];
+               const v3 = evalDataRaw.vca?.[pk]?.[i];
+               if (v2 == null || isNaN(v2) || v3 == null || isNaN(v3)) return NaN;
+               return (v + v2 + v3) / 3;
+             });
+             vTraces = [applyTrace({ x: filteredTimeX, y: vavg, type: 'scattergl', mode: 'lines', name: 'Vavg (kV)', line: { color: '#0072BD', width: 1.2 } }, 0)];
+          } else {
+             vTraces = [
+               applyTrace({ x: filteredTimeX, y: evalDataRaw.vab?.[pk], type: 'scattergl', mode: 'lines', name: 'Vab', line: { color: '#0072BD', width: 1.2 } }, 0),
+               applyTrace({ x: filteredTimeX, y: evalDataRaw.vbc?.[pk], type: 'scattergl', mode: 'lines', name: 'Vbc', line: { color: '#77AC30', width: 1.2 } }, 0),
+               applyTrace({ x: filteredTimeX, y: evalDataRaw.vca?.[pk], type: 'scattergl', mode: 'lines', name: 'Vca', line: { color: '#7E2F8E', width: 1.2 } }, 0)
+             ];
+          }
+
           const traces = [
-            applyTrace({ x: filteredTimeX, y: evalDataRaw.vab?.[pk], type: 'scattergl', mode: 'lines', name: 'Vab', line: { color: '#0072BD', width: 1.2 } }, 0),
-              applyTrace({ x: filteredTimeX, y: evalDataRaw.vbc?.[pk], type: 'scattergl', mode: 'lines', name: 'Vbc', line: { color: '#77AC30', width: 1.2 } }, 0),
-              applyTrace({ x: filteredTimeX, y: evalDataRaw.vca?.[pk], type: 'scattergl', mode: 'lines', name: 'Vca', line: { color: '#7E2F8E', width: 1.2 } }, 0),
-
-
+            ...vTraces,
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
             applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
             applyTrace({ y: evalDataRaw.cmdQ?.[pk]?.map((v) => v === 0 ? null : v), type: 'scatter', mode: 'lines', name: 'Q command from NCC', showlegend: Boolean(evalDataRaw.cmdQ?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.6, shape: 'hv', dash: 'dot' } }, 4)
@@ -1480,12 +1497,29 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
           div.style.position = 'relative';
           chartArea.appendChild(div);
 
+          // 20% projects show a single averaged voltage trace (Vavg), matching
+          // the fig4 "Reactive Power & Voltage" subplot and the in-app panels.
+          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+          let vTraces = [];
+          if (is20PercentRaw) {
+             const vavg = (evalDataRaw.vab?.[pk] || []).map((v, i) => {
+               if (v == null || isNaN(v)) return NaN;
+               const v2 = evalDataRaw.vbc?.[pk]?.[i];
+               const v3 = evalDataRaw.vca?.[pk]?.[i];
+               if (v2 == null || isNaN(v2) || v3 == null || isNaN(v3)) return NaN;
+               return (v + v2 + v3) / 3;
+             });
+             vTraces = [applyTrace({ x: filteredTimeX, y: vavg, type: 'scattergl', mode: 'lines', name: 'Vavg (kV)', line: { color: '#0072BD', width: 1.2 } }, 0)];
+          } else {
+             vTraces = [
+               applyTrace({ x: filteredTimeX, y: evalDataRaw.vab?.[pk], type: 'scattergl', mode: 'lines', name: 'Vab', line: { color: '#0072BD', width: 1.2 } }, 0),
+               applyTrace({ x: filteredTimeX, y: evalDataRaw.vbc?.[pk], type: 'scattergl', mode: 'lines', name: 'Vbc', line: { color: '#77AC30', width: 1.2 } }, 0),
+               applyTrace({ x: filteredTimeX, y: evalDataRaw.vca?.[pk], type: 'scattergl', mode: 'lines', name: 'Vca', line: { color: '#7E2F8E', width: 1.2 } }, 0)
+             ];
+          }
+
           const traces = [
-            applyTrace({ x: filteredTimeX, y: evalDataRaw.vab?.[pk], type: 'scattergl', mode: 'lines', name: 'Vab', line: { color: '#0072BD', width: 1.2 } }, 0),
-              applyTrace({ x: filteredTimeX, y: evalDataRaw.vbc?.[pk], type: 'scattergl', mode: 'lines', name: 'Vbc', line: { color: '#77AC30', width: 1.2 } }, 0),
-              applyTrace({ x: filteredTimeX, y: evalDataRaw.vca?.[pk], type: 'scattergl', mode: 'lines', name: 'Vca', line: { color: '#7E2F8E', width: 1.2 } }, 0),
-
-
+            ...vTraces,
             applyTrace({ y: evalDataRaw.qTotal?.[pk], type: 'scattergl', mode: 'lines', name: 'Q total', yaxis: 'y2', line: { color: '#D95319', width: 1.3 } }, 3),
             applyTrace({ x: filteredTimeX, y: ((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))) ? evalDataRaw.qBess?.[pk] : [], type: 'scattergl', mode: 'lines', name: 'Q (BESS) (MVar)', showlegend: Boolean((!['SNTV', 'SNTZ'].includes(project) && evalDataRaw.qBess?.[pk]?.some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) && evalDataRaw.pBESS?.[pk]?.some(v => !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001))), yaxis: 'y2', line: { color: '#000000', width: 1.4 } }, 10),
             applyTrace({ y: evalDataRaw.cmdQ?.[pk]?.map((v) => v === 0 ? null : v), type: 'scatter', mode: 'lines', name: (evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean((evalDataRaw.cmdQ?.[pk] || []).some((v) => v != null && !isNaN(Number(v)) && Math.abs(Number(v)) > 0.001)), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'dot' } }, 4)
