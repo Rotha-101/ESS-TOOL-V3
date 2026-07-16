@@ -5,7 +5,6 @@ import Plotly from 'plotly.js/dist/plotly.js';
 import type { Config } from 'plotly.js';
 import { Battery, Bot, Copy, Database, Download, Maximize2, Sliders, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getDBItem, setDBItem, removeDBItem } from '../lib/db';
 import {
   Select,
   SelectContent,
@@ -26,8 +25,11 @@ import { mergeNccFile } from '../features/daily-evaluation/services/nccMerge';
 import { downloadExcelLogs } from '../features/daily-evaluation/services/excelLogExport';
 import { copyChartsToClipboard } from '../features/daily-evaluation/services/clipboardExport';
 import { getStatusHTML, getStatusJSX } from '../features/daily-evaluation/utils/status';
-import { getDefaultMetric, normalizeActiveMetric } from '../features/daily-evaluation/config/metricConfig';
 import { defaultGraphConfig } from '../features/daily-evaluation/config/defaultGraphConfig';
+import { useSelection } from '../features/daily-evaluation/hooks/useSelection';
+import { useEvalData } from '../features/daily-evaluation/hooks/useEvalData';
+import { useGraphConfig } from '../features/daily-evaluation/hooks/useGraphConfig';
+import { usePinnedPoints } from '../features/daily-evaluation/hooks/usePinnedPoints';
 
 
 
@@ -51,145 +53,38 @@ export function DailyEvaluationGraph({
   const { importedGraph, setImportedGraph } = useAIContext();
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [localPlant, setLocalPlant] = useState<'plant1' | 'plant2' | 'plant3'>(
-    isAIAgentMode && importedGraph ? importedGraph.selectedPlant : 'plant1'
-  );
-  const selectedPlant = isAIAgentMode && externalPlant ? externalPlant : localPlant;
-  const setSelectedPlant = isAIAgentMode && onPlantChange ? onPlantChange : setLocalPlant;
 
-  const [activeMetric, setActiveMetric] = useState<ActiveMetric>(
-    isAIAgentMode && importedGraph ? normalizeActiveMetric(importedGraph.activeMetric, project) : getDefaultMetric(project)
-  );
-  const [evalData, setEvalDataState] = useState<EvalData | null>(
+  const { selectedPlant, setSelectedPlant, activeMetric, setActiveMetric } = useSelection({
+    project, isAIAgentMode, importedGraph, externalPlant, onPlantChange,
+  });
+
+  const { evalData, setEvalData } = useEvalData(
+    project,
     isAIAgentMode && importedGraph ? importedGraph.evalData : null
   );
-  const [isCalculating, setIsCalculating] = useState(false);
 
-  const setEvalData = async (data: EvalData | null) => {
-    setEvalDataState(data);
-    useAppStore.getState().setEvalDataCache(project, data);
-    if (data) {
-      await setDBItem(`eval_data_${project}`, data);
-    } else {
-      await removeDBItem(`eval_data_${project}`);
-    }
-  };
+  const [isCalculating, setIsCalculating] = useState(false);
   const [calcProgress, setCalcProgress] = useState(0);
   const [calcStatus, setCalcStatus] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [showCustomization, setShowCustomization] = useState(false);
   const showNccPCommand = useAppStore(state => state.showNccPCommand);
   const setShowNccPCommand = useAppStore(state => state.setShowNccPCommand);
-  const auditStateVersion = useAppStore(state => state.auditStateVersion);
 
+  const {
+    graphConfig, setGraphConfig, updateConfig, resetConfig,
+    configTab, setConfigTab, showCustomization, setShowCustomization,
+  } = useGraphConfig(isAIAgentMode && importedGraph ? importedGraph.graphConfig : null);
 
-  const [graphConfig, setGraphConfig] = useState<GraphConfig>(
-    isAIAgentMode && importedGraph ? { ...importedGraph.graphConfig } : { ...defaultGraphConfig }
-  );
-  const [configTab, setConfigTab] = useState<'layout' | 'axes' | 'lines' | 'time'>('layout');
+  const {
+    pinnedPoints, setPinnedPoints,
+    handleHover, handleUnhover, handleRelayout, handleClickAnnotation,
+  } = usePinnedPoints({
+    initial: isAIAgentMode && importedGraph ? importedGraph.pinnedPoints : null,
+    activeMetric,
+    selectedPlant,
+  });
 
-  const updateConfig = (patch: Partial<typeof defaultGraphConfig>) =>
-    setGraphConfig(prev => ({ ...prev, ...patch }));
-
-  const resetConfig = () => setGraphConfig({ ...defaultGraphConfig });
-
-  // Pinned point annotations â€” click a data point to pin/unpin it
-  const [pinnedPoints, setPinnedPoints] = useState<PinnedPoint[]>(
-    isAIAgentMode && importedGraph ? [...importedGraph.pinnedPoints] : []
-  );
-
-  const lastHoveredPtRef = useRef<any>(null);
-
-  const handleHover = (event: any, graphId: string) => {
-    if (event && event.points && event.points.length > 0) {
-      lastHoveredPtRef.current = { pt: event.points[0], graphId };
-    }
-  };
-  const handleUnhover = () => {
-    lastHoveredPtRef.current = null;
-  };
-
-  const handleRelayout = (event: any, graphId: string) => {
-    if (!event) return;
-    const keys = Object.keys(event);
-
-    const isAnnotationUpdate = keys.some(k => k.startsWith('annotations['));
-    if (!isAnnotationUpdate) return;
-
-    setPinnedPoints(prev => {
-      const next = [...prev];
-      const localPins = prev.filter(p => p.graphId === graphId);
-      let changed = false;
-      keys.forEach(key => {
-        const match = key.match(/annotations\[(\d+)\]\.(ax|ay)/);
-        if (match) {
-          const idx = parseInt(match[1], 10);
-          const prop = match[2];
-          const localPin = localPins[idx];
-          if (localPin) {
-            const globalIdx = next.findIndex(p => p.id === localPin.id);
-            if (globalIdx >= 0) {
-              next[globalIdx] = { ...next[globalIdx], [prop]: event[key] };
-              changed = true;
-            }
-          }
-        }
-      });
-      return changed ? next : prev;
-    });
-  };
-
-  const lastClickAnnotationTimeRef = useRef(0);
-  const handleClickAnnotation = (event: any, graphId: string) => {
-    const now = Date.now();
-    if (now - lastClickAnnotationTimeRef.current < 300) {
-      const clickedText = event.annotation.text;
-      const clickedX = event.annotation.x;
-      setPinnedPoints(prev => prev.filter(p => !(p.graphId === graphId && p.text === clickedText && String(p.x) === String(clickedX))));
-    }
-    lastClickAnnotationTimeRef.current = now;
-  };
-
-  const handleDoubleClick = () => {
-    if (!lastHoveredPtRef.current) return;
-    const { pt, graphId } = lastHoveredPtRef.current;
-    if (!pt || pt.x == null || pt.y == null) return;
-
-    const xVal = String(pt.x);
-    const yVal = Number(pt.y);
-    const name = pt.data?.name || 'Series';
-    const color = pt.data?.line?.color || pt.data?.marker?.color || '#0072BD';
-    const isY2 = pt.data?.yaxis === 'y2';
-    const id = `${graphId}__${xVal}__${name}`;
-
-    setPinnedPoints(prev => {
-      const existingIdx = prev.findIndex(p => p.id === id);
-      if (existingIdx >= 0) {
-        return prev.filter((_, i) => i !== existingIdx);
-      }
-      const offset = prev.length % 2 === 0 ? -40 : 40;
-      return [...prev, {
-        id, graphId, x: xVal, y: yVal, yref: isY2 ? 'y2' : 'y',
-        text: `<b>${xVal}</b>  ${yVal.toFixed(3)}<br><i>${name}</i>`,
-        color, ax: 30, ay: offset,
-      }];
-    });
-    lastHoveredPtRef.current = null;
-  };
-
-  useEffect(() => {
-    let lastMousedownTime = 0;
-    const handleMousedown = () => {
-      const now = Date.now();
-      if (now - lastMousedownTime < 300) {
-        handleDoubleClick();
-      }
-      lastMousedownTime = now;
-    };
-    document.addEventListener('mousedown', handleMousedown, true);
-    return () => document.removeEventListener('mousedown', handleMousedown, true);
-  }, []);
-
+  // Push local UI state back into the imported graph snapshot (AI mode)
   useEffect(() => {
     if (isAIAgentMode && importedGraph) {
       setImportedGraph((prev: any) => {
@@ -205,31 +100,9 @@ export function DailyEvaluationGraph({
     }
   }, [isAIAgentMode, activeMetric, selectedPlant, graphConfig, pinnedPoints]);
 
-  // Clear pins when switching figures or plants
-  useEffect(() => { setPinnedPoints([]); }, [activeMetric, selectedPlant]);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const nccFileInputRef = useRef<HTMLInputElement>(null);
-
-  // Ensure selectedPlant is valid for the current project
-  useEffect(() => {
-    if (project === 'SNTL400' && selectedPlant === 'plant3') {
-      setSelectedPlant('plant1');
-    }
-  }, [project, selectedPlant]);
-
-  // Load persisted evalData from localforage on mount or project change
-  useEffect(() => {
-    (async () => {
-      const saved = await getDBItem<any>(`eval_data_${project}`);
-      if (saved) {
-        setEvalDataState(saved);
-      } else {
-        setEvalDataState(null);
-      }
-    })();
-  }, [project, auditStateVersion]);
 
   // Parse custom spreadsheets (pipeline lives in services/evaluationParser)
   const parseEvaluationExcelFiles = async (files: { file: File, path: string, plantId?: string }[]) => {
