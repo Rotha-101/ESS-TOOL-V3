@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { WorkbookPreviewSource } from '../components/WorkbookPreview';
+import type { EvalData } from '../types/eval-data';
 
 interface AppState {
   activeTab: string;
@@ -104,8 +105,8 @@ interface AppState {
   hcActiveProject: string | null;
   setHcActiveProject: (proj: string | null) => void;
   // Global RAM Cache for instant dataset access (bypasses IndexedDB)
-  evalDataCache: Record<string, any>;
-  setEvalDataCache: (projectId: string, data: any) => void;
+  evalDataCache: Record<string, EvalData | null>;
+  setEvalDataCache: (projectId: string, data: EvalData | null) => void;
 }
 
 export const useAppStore = create<AppState>()(

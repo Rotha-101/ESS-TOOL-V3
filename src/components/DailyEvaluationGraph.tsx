@@ -21,9 +21,10 @@ import { getMockEvaluationData } from '../lib/mock-data';
 import { getProjectPlants } from '../lib/project-utils';
 import { useAppStore } from '../store/useAppStore';
 import { DraggableOverlay } from './DraggableOverlay';
+import type { EvalData } from '../types/eval-data';
+import type { ActiveMetric, GraphConfig, PinnedPoint } from '../types/graph';
 
 const XLSX = (window as any).XLSX;
-type ActiveMetric = 'f_p' | 'soc_p' | 'v_q' | 'fig4' | 'fig5' | 'fig6' | 'pf_p1' | 'pf_p2' | 'pf_p3';
 
 const isBessProjectFn = (project: string) => typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
 
@@ -77,12 +78,12 @@ export function DailyEvaluationGraph({
   const [activeMetric, setActiveMetric] = useState<ActiveMetric>(
     isAIAgentMode && importedGraph ? normalizeActiveMetric(importedGraph.activeMetric, project) : getDefaultMetric(project)
   );
-  const [evalData, setEvalDataState] = useState<any>(
+  const [evalData, setEvalDataState] = useState<EvalData | null>(
     isAIAgentMode && importedGraph ? importedGraph.evalData : null
   );
   const [isCalculating, setIsCalculating] = useState(false);
 
-  const setEvalData = async (data: any) => {
+  const setEvalData = async (data: EvalData | null) => {
     setEvalDataState(data);
     useAppStore.getState().setEvalDataCache(project, data);
     if (data) {
@@ -136,7 +137,7 @@ export function DailyEvaluationGraph({
     pinSize: 8,
     pinBgColor: '',
   };
-  const [graphConfig, setGraphConfig] = useState(
+  const [graphConfig, setGraphConfig] = useState<GraphConfig>(
     isAIAgentMode && importedGraph ? { ...importedGraph.graphConfig } : { ...defaultGraphConfig }
   );
   const [configTab, setConfigTab] = useState<'layout' | 'axes' | 'lines' | 'time'>('layout');
@@ -147,10 +148,7 @@ export function DailyEvaluationGraph({
   const resetConfig = () => setGraphConfig({ ...defaultGraphConfig });
 
   // Pinned point annotations â€” click a data point to pin/unpin it
-  const [pinnedPoints, setPinnedPoints] = useState<Array<{
-    id: string; graphId: string; x: string; y: number; yref: string;
-    text: string; color: string; ax: number; ay: number;
-  }>>(
+  const [pinnedPoints, setPinnedPoints] = useState<PinnedPoint[]>(
     isAIAgentMode && importedGraph ? [...importedGraph.pinnedPoints] : []
   );
 
@@ -1409,7 +1407,9 @@ export function DailyEvaluationGraph({
 
     // Convert timestamps to string representation for serialization
     const timestampsStr = evalData.timestamps.map((t: any) => new Date(t).toISOString());
-    let serializedEvalData = {
+    // Serialization variant of EvalData: string timestamps, and for SNTL a
+    // legacy plant4 key that must stay in the exported JSON for byte parity.
+    let serializedEvalData: any = {
       ...evalData,
       timestamps: timestampsStr
     };
@@ -2981,7 +2981,9 @@ export function DailyEvaluationGraph({
 
     // Convert timestamps to string representation for serialization
     const timestampsStr = evalData.timestamps.map((t: any) => new Date(t).toISOString());
-    let serializedEvalData = {
+    // Serialization variant of EvalData: string timestamps, and for SNTL a
+    // legacy plant4 key that must stay in the exported JSON for byte parity.
+    let serializedEvalData: any = {
       ...evalData,
       timestamps: timestampsStr
     };
