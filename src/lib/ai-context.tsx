@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
+import { GEMINI_MODEL } from './ai-config';
 
 interface AIContextProps {
   provider: 'gemini' | 'chatgpt' | 'claude';
@@ -88,7 +89,7 @@ You understand OT, energy infrastructure, industrial communication protocols (IE
           if (provider === 'gemini') {
               const ai = new GoogleGenAI({ apiKey: apiKey });
               await ai.models.generateContent({
-                  model: 'gemini-3-flash-preview',
+                  model: GEMINI_MODEL,
                   contents: [{ role: 'user', parts: [{ text: 'Hello' }] }]
               });
               setConnectionStatus('connected');

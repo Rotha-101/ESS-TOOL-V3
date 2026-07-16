@@ -8,6 +8,7 @@ import { getDBItem, setDBItem, removeDBItem } from '../lib/db';
 import { buildPlantCycleTableJs, getMockDailyResults, parseCycleExcelFile, type DailyResult, type ESSRow } from '../lib/cycle-utils';
 import { getFilesFromDataTransfer } from '../lib/file-utils';
 import { expandZip, extractDataDate, hcByProject } from '../lib/audit-engine.js';
+import { is20PercentProject } from '../lib/project-detection';
 import { PlantDetailTable } from './PlantDetailTable';
 import { getProjectPlants } from '../lib/project-utils';
 
@@ -284,7 +285,7 @@ export function CycleCalculation({ project, theme }: { project: string, theme: '
     await parseAndCalculateCycle(finalFiles);
   };
 
-  const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+  const isBessProject = is20PercentProject(project);
 
 
   const handleDownloadWorkbook = () => {

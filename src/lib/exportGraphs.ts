@@ -1,7 +1,6 @@
 import { generatePortableViewHtml } from './portable-view-template';
 import { getProjectPlants } from './project-utils';
-
-const is20PercentProject = (proj: string) => typeof proj === 'string' && (proj.startsWith('SNTB') || proj.startsWith('SNTV') || proj.startsWith('SNTD') || proj.startsWith('SNTZ') || proj.startsWith('MSGP'));
+import { is20PercentProject } from './project-detection';
 
 export const exportAllGraphsToZip = async (
   project: string,

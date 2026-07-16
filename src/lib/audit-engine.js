@@ -1,5 +1,8 @@
 "use strict";
 
+import { isBessProject } from './project-detection';
+import { extractDataDate } from './date-helpers';
+
 const XLSX = typeof window !== 'undefined' ? window.XLSX : null;
 const fflate = typeof window !== 'undefined' ? window.fflate : null;
 
@@ -242,7 +245,7 @@ function extractPlantId(path, file) {
   }
   
   // If no explicit Plant ID is found, check if it's a 20% BESS project (which only has 1 Plant)
-  const isBess = typeof hcActiveProject === 'string' && (hcActiveProject.startsWith('SNTB') || hcActiveProject.startsWith('SNTV') || hcActiveProject.startsWith('SNTD') || hcActiveProject.startsWith('SNTZ') || hcActiveProject.startsWith('MSGP'));
+  const isBess = isBessProject(hcActiveProject);
   if (isBess) {
     return 'Plant_01';
   }
@@ -250,28 +253,8 @@ function extractPlantId(path, file) {
   return 'Plant_unknown';
 }
 
-// Extract a YYYY-MM-DD date from a path/filename. Recognises:
-//   YYYY-MM-DD          (e.g. ..._2026-05-01.xlsx)
-//   YYYYMMDDHHMMSS      (e.g. ..._20260501000000_...)
-//   DD-Mon-YYYY         (e.g. .../PLANT#01_01-May-2026/...)
-// Returns "YYYY-MM-DD" or null.
-const _MON = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
-function _validDate(y, mo, d) { return y >= 2000 && y <= 2100 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31; }
-function _fmt(y, mo, d) { return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
-function extractDataDate(path, fileName) {
-  for (const s of [fileName, path]) {
-    let m = s.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
-    if (m && _validDate(+m[1], +m[2], +m[3])) return _fmt(+m[1], +m[2], +m[3]);
-    m = s.match(/(\d{1,2})-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(20\d{2})/i);
-    if (m) {
-      const mo = _MON[m[2].toLowerCase()];
-      if (mo && _validDate(+m[3], mo, +m[1])) return _fmt(+m[3], mo, +m[1]);
-    }
-    m = s.match(/(?:^|[_\W])(20\d{2})(\d{2})(\d{2})\d{6}(?:[_\W]|$)/);
-    if (m && _validDate(+m[1], +m[2], +m[3])) return _fmt(+m[1], +m[2], +m[3]);
-  }
-  return null;
-}
+// extractDataDate now lives in ./date-helpers (imported above, still
+// re-exported from this module for existing consumers).
 
 // ---------- Performance: shared file buffer cache ----------
 // Caches each File's raw ArrayBuffer so multiple parse passes (header probe +

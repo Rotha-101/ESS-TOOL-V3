@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FileCode, Upload, Save, AlertTriangle, Download, RefreshCw, Bot, Send, Zap } from "lucide-react";
 import { useAIContext } from '../lib/ai-context';
+import { GEMINI_MODEL } from '../lib/ai-config';
 import { GoogleGenAI } from "@google/genai";
 
 interface Props {
@@ -449,7 +450,7 @@ Be concise and helpful. If you write new code, write the COMPLETE generatePlotCo
     try {
       const ai = new GoogleGenAI({ apiKey: apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: GEMINI_MODEL,
         contents: [
           { role: 'user', parts: [{ text: systemPrompt + '\n\nUser request: ' + userMessage }] }
         ],

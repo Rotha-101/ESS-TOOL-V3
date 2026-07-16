@@ -1,7 +1,7 @@
 import { getProjectPlants } from './project-utils';
+import { is20PercentProject } from './project-detection';
 
-export const is20PercentProject = (proj: string) => 
-  typeof proj === 'string' && (proj.startsWith('SNTB') || proj.startsWith('SNTV') || proj.startsWith('SNTD') || proj.startsWith('SNTZ') || proj.startsWith('MSGP'));
+export { is20PercentProject };
 
 export const generateAllMatlabScripts = (project: string, evalData: any): { name: string; script: string; safeName: string }[] => {
   if (!evalData || !evalData.timestamps) return [];

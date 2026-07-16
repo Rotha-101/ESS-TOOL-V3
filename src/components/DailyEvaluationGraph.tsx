@@ -26,18 +26,10 @@ import type { ActiveMetric, GraphConfig, PinnedPoint } from '../types/graph';
 import { interpolateArray, forwardFillArray } from '../features/daily-evaluation/utils/interpolation';
 import { parseFlexDate } from '../features/daily-evaluation/utils/parsing';
 import { getStatusHTML, getStatusJSX } from '../features/daily-evaluation/utils/status';
+import { getDefaultMetric, normalizeActiveMetric } from '../features/daily-evaluation/config/metricConfig';
+import { defaultGraphConfig } from '../features/daily-evaluation/config/defaultGraphConfig';
 
 const XLSX = (window as any).XLSX;
-
-const isBessProjectFn = (project: string) => typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
-
-const getDefaultMetric = (project: string): ActiveMetric =>
-  project === 'SNTL400' || project === 'SNTL600' ? 'pf_p1' : (isBessProjectFn(project) ? 'fig4' : 'soc_p');
-
-const normalizeActiveMetric = (metric: unknown, project: string): ActiveMetric => {
-  const allowedMetrics: ActiveMetric[] = ['f_p', 'soc_p', 'v_q', 'fig4', 'fig5', 'fig6', 'pf_p1', 'pf_p2', 'pf_p3'];
-  return allowedMetrics.includes(metric as ActiveMetric) ? (metric as ActiveMetric) : getDefaultMetric(project);
-};
 
 
 export function DailyEvaluationGraph({
@@ -92,42 +84,6 @@ export function DailyEvaluationGraph({
   const auditStateVersion = useAppStore(state => state.auditStateVersion);
 
 
-  // Full MATLAB-style per-figure graph configuration
-  const defaultGraphConfig = {
-    // Layout
-    showGrid: true,
-    gridSize: 'small' as 'small' | 'medium' | 'large' | 'xlarge',
-    showLegend: true,
-    bgWhite: true,
-    // Line style
-    smooth: false,
-    showMarkers: false,
-    fillArea: false,
-    // Line widths per trace index (0-4)
-    lineWidths: [2, 1.6, 1.6, 1.8, 1.2] as number[],
-    // Y axis ranges (null = auto)
-    y1Min: '' as string,
-    y1Max: '' as string,
-    y2Min: '' as string,
-    y2Max: '' as string,
-    // Time range
-    timeFrom: '00:00:00',
-    timeTo: '23:59:59',
-    dataResolution: 1, // 1s, 60s, 300s
-    // Title & axis labels (empty = use default)
-    customTitle: '',
-    customY1Label: '',
-    customY2Label: '',
-    // Trace visibility (by index)
-    traceVisible: [true, true, true, true, true] as boolean[],
-    // Line dash style per trace
-    lineDash: ['solid', 'solid', 'solid', 'solid', 'solid'] as string[],
-    // Marker size
-    markerSize: 5,
-    // Pin settings
-    pinSize: 8,
-    pinBgColor: '',
-  };
   const [graphConfig, setGraphConfig] = useState<GraphConfig>(
     isAIAgentMode && importedGraph ? { ...importedGraph.graphConfig } : { ...defaultGraphConfig }
   );

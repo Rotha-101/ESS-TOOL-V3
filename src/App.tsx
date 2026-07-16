@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { ImportChartScript } from './components/ImportChartScript';
 import { getProjectPlants } from './lib/project-utils';
+import { is20PercentProject } from './lib/project-detection';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -193,7 +194,7 @@ export default function App() {
             alert("No evaluation data found. Please load data in Daily Evaluation Graph first.");
             return;
           }
-          const isBess = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+          const isBess = is20PercentProject(project);
           if (project === 'SNTL400' || project === 'SNTL600' || isBess) {
             if (useAppStore.getState().showNccPCommand) {
               evalDataFromDB = { ...evalDataFromDB, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
@@ -243,7 +244,7 @@ export default function App() {
         });
         return;
       }
-      const isBess = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBess = is20PercentProject(project);
       if (project === 'SNTL400' || project === 'SNTL600' || isBess) {
         if (useAppStore.getState().showNccPCommand) {
           evalData = { ...evalData, remoteP: { plant1: [], plant2: [], plant3: [], plant4: [] } };
@@ -408,7 +409,7 @@ export default function App() {
             if (sc) cfg = { ...cfg, ...JSON.parse(sc) };
           } catch (e) { }
 
-          const isBess = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
+          const isBess = is20PercentProject(project);
           const defaultMetric = isBess ? 'f_p' : 'pf_p1';
           const htmlContent = generatePortableViewHtml(project, evalData, cfg, defaultMetric, 'plant1', []);
           const encoder = new TextEncoder();
@@ -633,7 +634,7 @@ export default function App() {
             <>
               {/* KPI Cards */}
               {activeTab !== 'smart_report' && activeTab !== 'export' && activeTab !== 'soc' && activeTab !== 'ai' && activeTab !== 'jscript' && (() => {
-                const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+                const isBessProject = is20PercentProject(project);
                 return (
                   <section className={`grid ${getProjectPlants(project).length === 2 ? 'grid-cols-5' : (getProjectPlants(project).length === 1 ? 'grid-cols-4' : 'grid-cols-6')} gap-4 shrink-0`}>
                     <KpiCard

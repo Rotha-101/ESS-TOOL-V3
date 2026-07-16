@@ -54,6 +54,7 @@ import { MatFigExportPage } from "./pages/MatFigExportPage";
 import { ValidationDebug } from "./components/ValidationDebug";
 import { useAIContext } from '../lib/ai-context';
 import { useAppStore } from '../store/useAppStore';
+import { is20PercentProject } from '../lib/project-detection';
 import { 
   hcInitProjects, hcBulkImport, hcAcceptFiles, hcRunExport, getHcActiveProject, setHcActiveProject, 
   hcByProject, HC_PROJECTS, HC_CATS, hcLogHistory, setReactUpdateCb, getHcBusy,
@@ -1319,7 +1320,7 @@ function CycleCalculation({ project, theme }: { project: string, theme: 'dark' |
         let SPPC2_SACU: number[] = [];
         let SPPC3_SACU: number[] = [];
         
-        const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+        const isBessProject = is20PercentProject(project);
         
                 if (isBessProject) {
           const pName = typeof project === 'string' ? project : '';

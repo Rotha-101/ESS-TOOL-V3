@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Send, Loader2, User, ImagePlus, X, Trash2, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GEMINI_MODEL } from '../lib/ai-config';
 import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
 import { useAIContext } from '../lib/ai-context';
@@ -280,7 +281,7 @@ export function AIAgent() {
         }
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: GEMINI_MODEL,
             contents: apiMessages.concat(newUserMessage).map(msg => {
                 const parts: any[] = [];
                 if (msg.content) {
