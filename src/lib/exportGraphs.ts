@@ -491,15 +491,13 @@ export const exportAllGraphsToZip = async (
     }
   };
   const p = getProjectPlants(project);
-  const isBess = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
+  const isBess = is20PercentProject(project);
 
   if (isBess) {
-    addMetricGraphs('f_p', 'Figure 1 - Freq & Active Power');
-    addMetricGraphs('soc_p', 'Figure 2 - SOC & Active Power');
-    addMetricGraphs('v_q', 'Figure 3 - Volt & Reactive Power');
-    addMetricGraphs('fig4', 'Figure 4 - Powerflow Check');
-    addMetricGraphs('fig5', 'Figure 5 - Active Power & SOC');
-    addMetricGraphs('fig6', 'Figure 6 - Volt & Reactive Power');
+    // 20% projects export the same 3 figures the app and HTML exports offer
+    addMetricGraphs('fig4', 'Figure 1 - Daily Evaluation');
+    addMetricGraphs('fig5', 'Figure 2 - Active Power & SOC');
+    addMetricGraphs('fig6', 'Figure 3 - Volt & Reactive Power');
   } else {
     p.forEach((pk, i) => {
       addMetricGraphs(`pf_p${i+1}`, `Figure ${i+1} - SWG0${i+1} Powerflow Check`);
