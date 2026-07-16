@@ -648,6 +648,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
             };
 
             const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('DMF') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+            const hasPlant2 = (evalDataRaw.pTotal.plant2 && evalDataRaw.pTotal.plant2.some(v => v != null && !isNaN(v))) || (evalDataRaw.soc.plant2 && evalDataRaw.soc.plant2.some(v => v != null && !isNaN(v)));
             const hasPlant3 = !isBessProject && evalDataRaw.soc.plant3 && evalDataRaw.soc.plant3.some(v => !isNaN(v));
             const prj = typeof project !== 'undefined' ? project : 'Unknown';
             const getStatus = (val) => getStatusHTML(val, prj);
@@ -656,9 +657,9 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
               const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : 0;
               const lines = [
                 'Daily cycle (' + evalDataRaw.dataDate + '):',
-                'Cycle_Plant 01 = ' + Number(evalDataRaw.dailyCycle.plant1.toFixed(4)) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant1),
-                'Cycle_Plant 02 = ' + Number(evalDataRaw.dailyCycle.plant2.toFixed(4)) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant2)
+                'Cycle_Plant 01 = ' + Number(evalDataRaw.dailyCycle.plant1.toFixed(4)) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant1)
               ];
+              if (hasPlant2) lines.push('Cycle_Plant 02 = ' + Number(evalDataRaw.dailyCycle.plant2.toFixed(4)) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant2));
               if (hasPlant3) lines.push('Cycle_Plant 03 = ' + Number(evalDataRaw.dailyCycle.plant3.toFixed(4)) + ' -> ' + getStatus(evalDataRaw.dailyCycle.plant3));
               lines.push('Cycle_Average Daily Cycle = ' + Number(avgDaily.toFixed(4)) + ' -> ' + getStatus(avgDaily));
               drawInfoBox(lines, 160, yOffset + 60, bgWhite, 0, lines.length - 1);
@@ -668,9 +669,9 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
               const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : 0;
               const lines = [
                 'Plant Total Cycle (' + evalDataRaw.dataDate + '):',
-                'Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6),
-                'Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6)
+                'Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6)
               ];
+              if (hasPlant2) lines.push('Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6));
               if (hasPlant3) lines.push('Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6));
               lines.push('Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)));
               drawInfoBox(lines, 160, yOffset + 60, bgWhite, 0, lines.length - 1);
@@ -1136,6 +1137,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
       };
 
       const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('DMF') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const hasPlant2 = (evalDataRaw.pTotal.plant2 && evalDataRaw.pTotal.plant2.some(v => v != null && !isNaN(v))) || (evalDataRaw.soc.plant2 && evalDataRaw.soc.plant2.some(v => v != null && !isNaN(v)));
       const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalDataRaw.soc.plant3 && evalDataRaw.soc.plant3.some(v => !isNaN(v));
       const plants = isBessProject ? ['plant1'] : ['plant1', 'plant2'];
       if (hasPlant3) plants.push('plant3');
@@ -1357,8 +1359,8 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
           ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', [-30, 30], [20, 25.6], 'fig4_vq_' + pk), 'fig4_vq_' + pk);
         });
       } else if (activeMetric === 'fig5') {
-        const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : (evalDataRaw.dailyCycle.plant1 + evalDataRaw.dailyCycle.plant2 + (hasPlant3 ? evalDataRaw.dailyCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
-        const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : (evalDataRaw.totalCycle.plant1 + evalDataRaw.totalCycle.plant2 + (hasPlant3 ? evalDataRaw.totalCycle.plant3 : 0)) / (hasPlant3 ? 3 : 2);
+        const avgDaily = !isNaN(evalDataRaw.avgDailyCycle) ? evalDataRaw.avgDailyCycle : (evalDataRaw.dailyCycle.plant1 + (hasPlant2 ? evalDataRaw.dailyCycle.plant2 : 0) + (hasPlant3 ? evalDataRaw.dailyCycle.plant3 : 0)) / (1 + (hasPlant2 ? 1 : 0) + (hasPlant3 ? 1 : 0));
+        const avgTotal = !isNaN(evalDataRaw.avgTotalCycle) ? evalDataRaw.avgTotalCycle : (evalDataRaw.totalCycle.plant1 + (hasPlant2 ? evalDataRaw.totalCycle.plant2 : 0) + (hasPlant3 ? evalDataRaw.totalCycle.plant3 : 0)) / (1 + (hasPlant2 ? 1 : 0) + (hasPlant3 ? 1 : 0));
 
         plants.forEach((pk, statsIndex) => {
           const div = document.createElement('div');
@@ -1374,7 +1376,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
             boxAnnotations.push({
               x: 0.05, y: 0.95, xref: 'paper', yref: 'paper',
               xanchor: 'left', yanchor: 'top',
-              text: '<b>Daily cycle (' + evalDataRaw.dataDate + '):</b><br>Cycle_Plant 01 = ' + Number(evalDataRaw.dailyCycle.plant1.toFixed(4)) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant1, project) + '<br>Cycle_Plant 02 = ' + Number(evalDataRaw.dailyCycle.plant2.toFixed(4)) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant2, project) + (hasPlant3 ? '<br>Cycle_Plant 03 = ' + Number(evalDataRaw.dailyCycle.plant3.toFixed(4)) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant3, project) : '') + '<br><span style="color: #2563EB"><b>Cycle_Average Daily Cycle = ' + Number(avgDaily.toFixed(4)) + ' -> ' + getStatusHTML(avgDaily, project) + '</b></span>',
+              text: '<b>Daily cycle (' + evalDataRaw.dataDate + '):</b><br>Cycle_Plant 01 = ' + Number(evalDataRaw.dailyCycle.plant1.toFixed(4)) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant1, project) + (hasPlant2 ? '<br>Cycle_Plant 02 = ' + Number(evalDataRaw.dailyCycle.plant2.toFixed(4)) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant2, project) : '') + (hasPlant3 ? '<br>Cycle_Plant 03 = ' + Number(evalDataRaw.dailyCycle.plant3.toFixed(4)) + ' -> ' + getStatusHTML(evalDataRaw.dailyCycle.plant3, project) : '') + '<br><span style="color: #2563EB"><b>Cycle_Average Daily Cycle = ' + Number(avgDaily.toFixed(4)) + ' -> ' + getStatusHTML(avgDaily, project) + '</b></span>',
               showarrow: false,
               bgcolor: graphConfig.bgWhite ? 'rgba(255,255,255,0.95)' : 'rgba(20,20,40,0.95)',
               bordercolor: 'rgba(59, 130, 246, 0.8)',
@@ -1388,7 +1390,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
             boxAnnotations.push({
               x: 0.05, y: 0.95, xref: 'paper', yref: 'paper',
               xanchor: 'left', yanchor: 'top',
-              text: '<b>Plant Total Cycle (' + evalDataRaw.dataDate + '):</b><br>Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6) + '<br>Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6) + (hasPlant3 ? '<br>Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6) : '') + '<br><span style="color: #2563EB"><b>Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)) + '</b></span>',
+              text: '<b>Plant Total Cycle (' + evalDataRaw.dataDate + '):</b><br>Plant 01 Total Cycle = ' + evalDataRaw.totalCycle.plant1.toFixed(6) + (hasPlant2 ? '<br>Plant 02 Total Cycle = ' + evalDataRaw.totalCycle.plant2.toFixed(6) : '') + (hasPlant3 ? '<br>Plant 03 Total Cycle = ' + evalDataRaw.totalCycle.plant3.toFixed(6) : '') + '<br><span style="color: #2563EB"><b>Average Total Plant Cycle = ' + Number(avgTotal.toFixed(6)) + '</b></span>',
               showarrow: false,
               bgcolor: graphConfig.bgWhite ? 'rgba(255,255,255,0.95)' : 'rgba(20,20,40,0.95)',
               bordercolor: 'rgba(59, 130, 246, 0.8)',
