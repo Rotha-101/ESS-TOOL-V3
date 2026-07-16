@@ -21,14 +21,14 @@ import { useAppStore } from '../store/useAppStore';
 import { DraggableOverlay } from './DraggableOverlay';
 import type { EvalData } from '../types/eval-data';
 import type { ActiveMetric, GraphConfig, PinnedPoint } from '../types/graph';
-import { forwardFillArray } from '../features/daily-evaluation/utils/interpolation';
-import { parseFlexDate } from '../features/daily-evaluation/utils/parsing';
 import { parseEvaluationFiles } from '../features/daily-evaluation/services/evaluationParser';
+import { mergeNccFile } from '../features/daily-evaluation/services/nccMerge';
+import { downloadExcelLogs } from '../features/daily-evaluation/services/excelLogExport';
+import { copyChartsToClipboard } from '../features/daily-evaluation/services/clipboardExport';
 import { getStatusHTML, getStatusJSX } from '../features/daily-evaluation/utils/status';
 import { getDefaultMetric, normalizeActiveMetric } from '../features/daily-evaluation/config/metricConfig';
 import { defaultGraphConfig } from '../features/daily-evaluation/config/defaultGraphConfig';
 
-const XLSX = (window as any).XLSX;
 
 
 export function DailyEvaluationGraph({
@@ -332,92 +332,7 @@ export function DailyEvaluationGraph({
     setErrorMessage('');
 
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array', cellDates: false, raw: true });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      if (!sheet || !sheet['!ref']) throw new Error("Empty spreadsheet");
-
-      const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null }) as any[];
-      if (aoa.length < 2) throw new Error("Not enough rows");
-
-      let headerRowIdx = -1;
-      let headerRow: string[] = [];
-      for (let ri = 0; ri < Math.min(8, aoa.length); ri++) {
-        const row = aoa[ri];
-        if (!row) continue;
-        const rowStrs = row.map((c: any) => c == null ? '' : String(c).trim());
-        if (rowStrs.some((s: string) => /^(time|datetime|date\/time|starttime)$/i.test(s.replace(/\s+/g, '')))) {
-          headerRowIdx = ri;
-          headerRow = rowStrs;
-          break;
-        }
-      }
-      if (headerRowIdx === -1) throw new Error("Could not find header row (Time/Datetime)");
-
-      const timeIdx = headerRow.findIndex((h: string) => /^(time|datetime|date\/time|starttime)$/i.test(h.replace(/\s+/g, '')));
-      const nccP1Idx = headerRow.findIndex((h: string) => /swg01.+p\(/i.test(h));
-      const nccQ1Idx = headerRow.findIndex((h: string) => /swg01.+q\(/i.test(h));
-      const nccSOC1Idx = headerRow.findIndex((h: string) => /swg01.+soc/i.test(h));
-      const nccP2Idx = headerRow.findIndex((h: string) => /swg02.+p\(/i.test(h));
-      const nccQ2Idx = headerRow.findIndex((h: string) => /swg02.+q\(/i.test(h));
-      const nccSOC2Idx = headerRow.findIndex((h: string) => /swg02.+soc/i.test(h));
-      const nccP3Idx = headerRow.findIndex((h: string) => /swg03.+p\(/i.test(h));
-      const nccQ3Idx = headerRow.findIndex((h: string) => /swg03.+q\(/i.test(h));
-      const nccSOC3Idx = headerRow.findIndex((h: string) => /swg03.+soc/i.test(h));
-
-      const safeNum = (v) => {
-        if (v == null || v === '--' || v === 'N/A' || v === '') return NaN;
-        const n = parseFloat(String(v));
-        return isNaN(n) ? NaN : n;
-      };
-
-      const newData = {
-        ...evalData,
-        cmdP: { ...evalData.cmdP },
-        cmdQ: { ...evalData.cmdQ },
-        soc: { ...evalData.soc }
-      };
-
-      for (const p of ['plant1', 'plant2', 'plant3'] as const) {
-        if (newData.cmdP[p]) newData.cmdP[p] = [...newData.cmdP[p]];
-        if (newData.cmdQ[p]) newData.cmdQ[p] = [...newData.cmdQ[p]];
-        if (newData.soc[p]) newData.soc[p] = [...newData.soc[p]];
-      }
-
-      for (const row of aoa.slice(headerRowIdx + 1)) {
-        if (!row || row.length === 0) continue;
-        const rawTime = row[timeIdx];
-        if (rawTime == null) continue;
-        const tStr = String(rawTime).trim();
-        if (['average', 'max', 'min', 'total'].some(k => tStr.toLowerCase().startsWith(k))) continue;
-        const t = parseFlexDate(rawTime);
-        if (!t) continue;
-
-        const sec = t.getHours() * 3600 + t.getMinutes() * 60 + t.getSeconds();
-        const ti = Math.min(86400 - 1, Math.max(0, sec));
-
-        const p1 = safeNum(row[nccP1Idx]);
-        const q1 = safeNum(row[nccQ1Idx]);
-        const p2 = safeNum(row[nccP2Idx]);
-        const q2 = safeNum(row[nccQ2Idx]);
-        const p3 = safeNum(row[nccP3Idx]);
-        const q3 = safeNum(row[nccQ3Idx]);
-
-        if (!isNaN(p1)) newData.cmdP.plant1[ti] = p1;
-        if (!isNaN(q1)) newData.cmdQ.plant1[ti] = q1;
-        if (!isNaN(p2)) newData.cmdP.plant2[ti] = p2;
-        if (!isNaN(q2)) newData.cmdQ.plant2[ti] = q2;
-        if (!isNaN(p3)) newData.cmdP.plant3[ti] = p3;
-        if (!isNaN(q3)) newData.cmdQ.plant3[ti] = q3;
-      }
-
-      const plants: ('plant1' | 'plant2' | 'plant3')[] = ['plant1', 'plant2', 'plant3'];
-      for (const p of plants) {
-        forwardFillArray(newData.cmdP[p], true);
-        forwardFillArray(newData.cmdQ[p], true);
-        forwardFillArray(newData.soc[p]);
-      }
-
+      const newData = await mergeNccFile(file, evalData);
       setEvalData(newData); (window as any).DEBUG_EVAL_DATA = newData;
       setCalcStatus('NCC Data merged successfully!');
     } catch (err: any) {
@@ -431,226 +346,12 @@ export function DailyEvaluationGraph({
   // Export processed data as a real Excel file matching MATLAB logs
   const handleDownloadExcelLogs = () => {
     if (!evalData) return;
-    try {
-      const wb = XLSX.utils.book_new();
-
-      // Sheet 1: Message
-      const messageRows = [
-        { 'Timestamp': new Date().toISOString(), 'Message': `[INFO] Daily evaluation compiled for project ${project}.` },
-        { 'Timestamp': new Date().toISOString(), 'Message': '[INFO] Aligning timelines and forward-filling telemetry gaps.' },
-        { 'Timestamp': new Date().toISOString(), 'Message': '[INFO] Simulated remote active power dispatch math: alloc_with_limits compiled successfully.' },
-        { 'Timestamp': new Date().toISOString(), 'Message': '[DONE] Saved raw data + historical raw data to workbook.' }
-      ];
-      const wsMessage = XLSX.utils.json_to_sheet(messageRows);
-      XLSX.utils.book_append_sheet(wb, wsMessage, 'Message');
-
-      // Sheet 2: Realtime_Dispatch
-      const timeStampsStr = evalData.timestamps.map((t: Date) => {
-        const hh = String(t.getHours()).padStart(2, '0');
-        const mm = String(t.getMinutes()).padStart(2, '0');
-        return `${hh}:${mm}`;
-      });
-      const dispatchRows = timeStampsStr.map((time: string, idx: number) => ({
-        'Time': time,
-        'Plant1_Actual_MW': evalData.pTotal.plant1[idx] ? Number(evalData.pTotal.plant1[idx].toFixed(2)) : 0,
-        'Plant1_Dispatch_MW': evalData.dispatchP.plant1[idx] ? Number(evalData.dispatchP.plant1[idx].toFixed(2)) : 0,
-        'Plant2_Actual_MW': evalData.pTotal.plant2[idx] ? Number(evalData.pTotal.plant2[idx].toFixed(2)) : 0,
-        'Plant2_Dispatch_MW': evalData.dispatchP.plant2[idx] ? Number(evalData.dispatchP.plant2[idx].toFixed(2)) : 0,
-        ...(project !== 'SNTL400' ? {
-          'Plant3_Actual_MW': evalData.pTotal.plant3[idx] ? Number(evalData.pTotal.plant3[idx].toFixed(2)) : 0,
-          'Plant3_Dispatch_MW': evalData.dispatchP.plant3[idx] ? Number(evalData.dispatchP.plant3[idx].toFixed(2)) : 0,
-        } : {})
-      }));
-      const wsDispatch = XLSX.utils.json_to_sheet(dispatchRows);
-      XLSX.utils.book_append_sheet(wb, wsDispatch, 'Realtime_Dispatch');
-
-      const outBuf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([outBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `Realtime_Data_Debug_${project}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
-    } catch (err: any) {
-      alert(`Export failed: ${err.message || String(err)}`);
-    }
+    downloadExcelLogs(evalData, project);
   };
 
   const handleCopyClipboard = async () => {
     if (!evalData || !chartContainerRef.current) return;
-
-    const plotDivs = chartContainerRef.current.querySelectorAll('.js-plotly-plot');
-    if (plotDivs.length === 0) {
-      alert("No graphs found to copy.");
-      return;
-    }
-
-    const loadImage = (src: string) =>
-      new Promise<HTMLImageElement>((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = reject;
-        image.src = src;
-      });
-
-    try {
-      const targetWidth = 1920;
-      const targetHeight = 1080;
-      const plotCount = plotDivs.length;
-
-      const titleEl = chartContainerRef.current.querySelector('.flex-col > .text-center b, .flex-col > .text-center');
-      const titleText = titleEl?.textContent?.trim() ?? '';
-      const titleHeight = titleText ? 44 : 0;
-      const plotAreaHeight = targetHeight - titleHeight;
-
-      const baseSubplotHeight = Math.floor(plotAreaHeight / plotCount);
-      const remainder = plotAreaHeight - baseSubplotHeight * plotCount;
-      const subplotHeights = Array.from({ length: plotCount }, (_, i) =>
-        baseSubplotHeight + (i < remainder ? 1 : 0)
-      );
-
-      const imageUrls = await Promise.all(
-        Array.from(plotDivs).map((div, i) =>
-          Plotly.toImage(div as any, {
-            format: 'png',
-            width: targetWidth,
-            height: subplotHeights[i],
-            scale: 1,
-          })
-        )
-      );
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-
-      const bgColor = graphConfig.bgWhite ? '#FFFFFF' : '#1a1a2e';
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      if (titleText) {
-        ctx.fillStyle = graphConfig.bgWhite ? '#000000' : '#E0E0E0';
-        ctx.font = 'bold 24px Helvetica, Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(titleText, targetWidth / 2, titleHeight / 2);
-      }
-
-      let yOffset = titleHeight;
-      for (let i = 0; i < imageUrls.length; i++) {
-        const img = await loadImage(imageUrls[i]);
-        ctx.drawImage(img, 0, yOffset, targetWidth, subplotHeights[i]);
-
-        if (activeMetric === 'fig5' && evalData && evalData.dailyCycle && evalData.totalCycle) {
-          const drawInfoBox = (lines: string[], x: number, y: number, bgWhite: boolean, headerIdx: number, footerIdx: number) => {
-            const padding = 12;
-            const lineHeight = 22;
-            ctx.font = '15px "JetBrains Mono", monospace';
-            let maxWidth = 0;
-            lines.forEach((line, idx) => {
-              ctx.font = idx === headerIdx ? 'bold 16px "JetBrains Mono", monospace' : (idx === footerIdx ? 'bold 15px "JetBrains Mono", monospace' : '15px "JetBrains Mono", monospace');
-              const w = ctx.measureText(line).width;
-              if (w > maxWidth) maxWidth = w;
-            });
-            const boxWidth = maxWidth + padding * 2;
-            const boxHeight = lines.length * lineHeight + padding * 2;
-
-            ctx.fillStyle = bgWhite ? 'rgba(255,255,255,0.95)' : 'rgba(30,30,46,0.95)';
-            ctx.fillRect(x, y, boxWidth, boxHeight);
-            ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(x, y, boxWidth, boxHeight);
-
-            lines.forEach((line, idx) => {
-              if (idx === headerIdx) {
-                ctx.font = 'bold 16px "JetBrains Mono", monospace';
-                ctx.fillStyle = bgWhite ? '#000' : '#FFF';
-              } else if (idx === footerIdx) {
-                ctx.font = 'bold 15px "JetBrains Mono", monospace';
-                ctx.fillStyle = '#2563EB';
-              } else {
-                ctx.font = '15px "JetBrains Mono", monospace';
-                ctx.fillStyle = bgWhite ? '#000' : '#E0E0E0';
-              }
-              ctx.textAlign = 'left';
-              ctx.fillText(line, x + padding, y + padding + idx * lineHeight + 15);
-
-              if (idx === headerIdx) {
-                ctx.beginPath();
-                ctx.moveTo(x + padding, y + padding + idx * lineHeight + 20);
-                ctx.lineTo(x + boxWidth - padding, y + padding + idx * lineHeight + 20);
-                ctx.strokeStyle = 'rgba(229, 231, 235, 1)';
-                ctx.stroke();
-              }
-              if (footerIdx > 0 && idx === footerIdx - 1) {
-                ctx.beginPath();
-                ctx.moveTo(x + padding, y + padding + idx * lineHeight + 24);
-                ctx.lineTo(x + boxWidth - padding, y + padding + idx * lineHeight + 24);
-                ctx.strokeStyle = 'rgba(229, 231, 235, 1)';
-                ctx.stroke();
-              }
-            });
-          };
-
-          const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
-          const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalData.soc.plant3 && evalData.soc.plant3.some((v) => !isNaN(v));
-          const getStatus = (val: number) => val < 0.5 ? 'Take action' : val < 0.8 ? 'Warning' : (project === 'SNTL400' && val > 1 ? 'Alert' : 'Normal');
-
-          if (i === 0) {
-            const avgDaily = !isNaN(evalData.avgDailyCycle) ? evalData.avgDailyCycle : 0;
-            const lines = [
-              `Daily cycle (${evalData.dataDate}):`,
-              `Cycle_Plant 01 = ${evalData.dailyCycle.plant1.toFixed(3)} -> ${getStatus(evalData.dailyCycle.plant1)}`,
-              `Cycle_Plant 02 = ${evalData.dailyCycle.plant2.toFixed(3)} -> ${getStatus(evalData.dailyCycle.plant2)}`
-            ];
-            if (hasPlant3) lines.push(`Cycle_Plant 03 = ${evalData.dailyCycle.plant3.toFixed(3)} -> ${getStatus(evalData.dailyCycle.plant3)}`);
-            lines.push(`Cycle_Average Daily Cycle = ${avgDaily.toFixed(3)} -> ${getStatus(avgDaily)}`);
-            drawInfoBox(lines, 160, yOffset + 60, graphConfig.bgWhite, 0, lines.length - 1);
-          }
-
-          if (i === 1) {
-            const avgTotal = !isNaN(evalData.avgTotalCycle) ? evalData.avgTotalCycle : 0;
-            const lines = [
-              `Plant Total Cycle (${evalData.dataDate}):`,
-              `Plant 01 Total Cycle = ${evalData.totalCycle.plant1.toFixed(6)}`,
-              `Plant 02 Total Cycle = ${evalData.totalCycle.plant2.toFixed(6)}`
-            ];
-            if (hasPlant3) lines.push(`Plant 03 Total Cycle = ${evalData.totalCycle.plant3.toFixed(6)}`);
-            lines.push(`Average Total Plant Cycle = ${Number(avgTotal.toFixed(6))}`);
-            drawInfoBox(lines, 160, yOffset + 60, graphConfig.bgWhite, 0, lines.length - 1);
-
-            if (evalData.deviations && evalData.deviations.highSOC) {
-              const devLines = [
-                `Max deviation timings:`,
-                `Max deviation (HIGH SOC): ${evalData.deviations.highSOC.pair} = ${evalData.deviations.highSOC.text}`,
-                `Max deviation (LOW SOC): ${evalData.deviations.lowSOC.pair} = ${evalData.deviations.lowSOC.text}`
-              ];
-              drawInfoBox(devLines, (targetWidth / 2) - 150, yOffset + 60, graphConfig.bgWhite, 0, -1);
-            }
-          }
-        }
-
-        yOffset += subplotHeights[i];
-      }
-
-      const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, 'image/png');
-      });
-      if (!blob) return;
-
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob })
-      ]);
-      alert("Graph captured at 1920×1080 and copied to clipboard!");
-    } catch (err) {
-      console.error("Image capture error:", err);
-      alert("Failed to capture graphs. Please ensure browser permissions allow clipboard access.");
-    }
+    await copyChartsToClipboard({ container: chartContainerRef.current, evalData, project, activeMetric, graphConfig });
   };
 
   const handleExportHtml = async () => {
