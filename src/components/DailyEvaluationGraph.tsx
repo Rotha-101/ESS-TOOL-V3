@@ -23,6 +23,9 @@ import { useAppStore } from '../store/useAppStore';
 import { DraggableOverlay } from './DraggableOverlay';
 import type { EvalData } from '../types/eval-data';
 import type { ActiveMetric, GraphConfig, PinnedPoint } from '../types/graph';
+import { interpolateArray, forwardFillArray } from '../features/daily-evaluation/utils/interpolation';
+import { parseFlexDate } from '../features/daily-evaluation/utils/parsing';
+import { getStatusHTML, getStatusJSX } from '../features/daily-evaluation/utils/status';
 
 const XLSX = (window as any).XLSX;
 
@@ -37,18 +40,6 @@ const normalizeActiveMetric = (metric: unknown, project: string): ActiveMetric =
 };
 
 
-const getStatusHTML = (val: number, prj: string) => {
-  if (val < 0.5) return '<span style="color:#DC2626">🔴 Take action</span>';
-  if (val < 0.8) return '<span style="color:#EAB308">🟡 Warning</span>';
-  if (prj === 'SNTL400' && val > 1) return '<span style="color:#DC2626">🔴 Alert</span>';
-  return '<span style="color:#22C55E">🟢 Normal</span>';
-};
-const getStatusJSX = (val: number, prj: string) => {
-  if (val < 0.5) return <span style={{color:'#DC2626'}}>🔴 Take action</span>;
-  if (val < 0.8) return <span style={{color:'#EAB308'}}>🟡 Warning</span>;
-  if (prj === 'SNTL400' && val > 1) return <span style={{color:'#DC2626'}}>🔴 Alert</span>;
-  return <span style={{color:'#22C55E'}}>🟢 Normal</span>;
-};
 export function DailyEvaluationGraph({
   theme,
   project,
@@ -284,130 +275,6 @@ export function DailyEvaluationGraph({
       }
     })();
   }, [project, auditStateVersion]);
-
-  // JS Implementation of MATLAB alloc_with_limits
-  const runAllocWithLimits = (
-    Pset: number,
-    SOCc: number[],
-    SOH: number[],
-    SOCmin: number,
-    SOCmax: number,
-    Crate_dis: number[],
-    Crate_cha: number[],
-    P_limit: number[]
-  ) => {
-    const Pi = [0, 0, 0];
-    let w = [0, 0, 0];
-    if (Pset > 0) {
-      w = SOCc.map((soc, i) => Math.max(0, soc - SOCmin) * SOH[i] * Crate_dis[i]);
-    } else if (Pset < 0) {
-      w = SOCc.map((soc, i) => Math.max(0, SOCmax - soc) * SOH[i] * Crate_cha[i]);
-    } else {
-      return Pi;
-    }
-    const sumW = w.reduce((a, b) => a + b, 0);
-    if (sumW <= 0) return Pi;
-
-    const signP = Math.sign(Pset);
-    const Pmag = Math.abs(Pset);
-    const active = [true, true, true];
-    const Pi_mag = [0, 0, 0];
-    let remaining = Pmag;
-
-    for (let iter = 0; iter < 3; iter++) {
-      if (remaining <= 1e-9) break;
-      const activeW = w.filter((_, i) => active[i]).reduce((a, b) => a + b, 0);
-      if (activeW <= 0) break;
-
-      for (let i = 0; i < 3; i++) {
-        if (!active[i]) continue;
-        const alloc = remaining * (w[i] / activeW);
-        const cap = P_limit[i] - Pi_mag[i];
-        if (cap <= 1e-12) {
-          active[i] = false;
-          continue;
-        }
-        if (alloc >= cap) {
-          Pi_mag[i] += cap;
-          active[i] = false;
-        } else {
-          Pi_mag[i] += alloc;
-        }
-      }
-      remaining = Pmag - Pi_mag.reduce((a, b) => a + b, 0);
-    }
-    return Pi_mag.map(mag => mag * signP);
-  };
-
-  // Helper: parse Excel date flex
-  const parseFlexDate = (val) => {
-    if (val instanceof Date) return val;
-    if (typeof val === 'number') {
-      return new Date(Math.round((val - 25569) * 86400000));
-    }
-    const s = String(val).trim();
-    if (!s || s === 'Average' || s === 'Max' || s === 'Min') return null;
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d;
-  };
-
-  const interpolateArray = (arr: number[]) => {
-    let lastValidIdx = -1;
-    for (let i = 0; i < arr.length; i++) {
-      if (!isNaN(arr[i])) {
-        if (lastValidIdx !== -1 && i - lastValidIdx > 1) {
-          const startVal = arr[lastValidIdx];
-          const endVal = arr[i];
-          const steps = i - lastValidIdx;
-          for (let j = 1; j < steps; j++) {
-            arr[lastValidIdx + j] = startVal + (endVal - startVal) * (j / steps);
-          }
-        }
-        lastValidIdx = i;
-      }
-    }
-    const firstIdx = arr.findIndex(v => !isNaN(v));
-    if (firstIdx > 0) {
-      for (let i = 0; i < firstIdx; i++) arr[i] = arr[firstIdx];
-    }
-    let lastIdx = -1;
-    for (let i = arr.length - 1; i >= 0; i--) {
-      if (!isNaN(arr[i])) {
-        lastIdx = i;
-        break;
-      }
-    }
-    if (lastIdx !== -1 && lastIdx < arr.length - 1) {
-      for (let i = lastIdx + 1; i < arr.length; i++) arr[i] = arr[lastIdx];
-    }
-  };
-
-  // Helper: Forward-fill empty telemetry data gaps to ensure clean lines
-  const forwardFillArray = (arr: any[], noBackwardFill = false) => {
-    let last = NaN;
-    for (let i = 0; i < arr.length; i++) {
-      const val = Number(arr[i]);
-      if (arr[i] == null || arr[i] === "" || Number.isNaN(val)) {
-        if (!Number.isNaN(last)) arr[i] = last;
-      } else {
-        last = val;
-        arr[i] = val; // Ensure it's stored as a number, not string
-      }
-    }
-    if (!noBackwardFill) {
-      const firstIdx = arr.findIndex(v => v != null && v !== "" && !Number.isNaN(Number(v)));
-      if (firstIdx > 0) {
-        const firstVal = Number(arr[firstIdx]);
-        for (let i = 0; i < firstIdx; i++) arr[i] = firstVal;
-      }
-    }
-  };
-
-  // Helper: search columns matching key
-  const findColIdx = (headers: string[], key: string) => {
-    const k = key.toLowerCase();
-    return headers.findIndex(h => h.toLowerCase().includes(k));
-  };
 
   // Parse custom spreadsheets
   const parseEvaluationExcelFiles = async (files: { file: File, path: string, plantId?: string }[]) => {
