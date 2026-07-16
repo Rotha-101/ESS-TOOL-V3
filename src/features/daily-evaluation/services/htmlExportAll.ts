@@ -102,7 +102,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
           <option value="pf_p3">Figure 3: SWG03 Powerflow Check</option>
           <option value="fig5">Figure 4: Active Power & SOC All Plants</option>
           <option value="fig6">Figure 5: Volt & Reactive Power All Plants</option>
-        ` : ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'MSGP'].some(p => project.startsWith(p)) ? `
+        ` : ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p)) ? `
           <option value="fig4">Figure 1: Daily Evaluation</option>
           <option value="fig5">Figure 2: Active Power & SOC All Plants</option>
           <option value="fig6">Figure 3: Volt & Reactive Power All Plants</option>
@@ -383,7 +383,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
     // the project's Figure 1 and keep the dropdown in sync.
     const availableMetrics = project === 'SNTL400' ? ['pf_p1', 'pf_p2', 'fig5', 'fig6']
       : project === 'SNTL600' ? ['pf_p1', 'pf_p2', 'pf_p3', 'fig5', 'fig6']
-      : ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'MSGP'].some(p => project.startsWith(p)) ? ['fig4', 'fig5', 'fig6']
+      : ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p)) ? ['fig4', 'fig5', 'fig6']
       : ['f_p', 'soc_p', 'v_q', 'fig4', 'fig5', 'fig6'];
     if (availableMetrics.indexOf(activeMetric) === -1) activeMetric = availableMetrics[0];
     const metricSelectEl = document.getElementById('select-active-metric');
@@ -393,7 +393,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
       'f_p': 'Frequency & Active Power (All Plants)',
       'soc_p': 'SOC & Active Power (All Plants)',
       'v_q': 'Reactive Power & Voltage (All Plants)',
-      'fig4': ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'MSGP'].some(p => project.startsWith(p)) ? 'Daily Evaluation' : 'Powerflow (Daily Check) All Plants',
+      'fig4': ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p)) ? 'Daily Evaluation' : 'Powerflow (Daily Check) All Plants',
       'fig5': 'Active Power & SOC (All Plants)',
       'fig6': 'Reactive Power & Voltage (All Plants)',
       'pf_p1': 'SWG01 Powerflow Check',
@@ -647,7 +647,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
               });
             };
 
-            const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+            const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('DMF') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
             const hasPlant3 = !isBessProject && evalDataRaw.soc.plant3 && evalDataRaw.soc.plant3.some(v => !isNaN(v));
             const prj = typeof project !== 'undefined' ? project : 'Unknown';
             const getStatus = (val) => getStatusHTML(val, prj);
@@ -1135,7 +1135,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
         toImageButtonOptions: { format: 'png', filename: 'plot_export', scale: 2 }
       };
 
-      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('DMF') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
       const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalDataRaw.soc.plant3 && evalDataRaw.soc.plant3.some(v => !isNaN(v));
       const plants = isBessProject ? ['plant1'] : ['plant1', 'plant2'];
       if (hasPlant3) plants.push('plant3');
@@ -1190,7 +1190,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
 
           // 20% projects show a single averaged voltage trace (Vavg), matching
           // the fig4 "Reactive Power & Voltage" subplot and the in-app panels.
-          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p));
           let vTraces = [];
           if (is20PercentRaw) {
              const vavg = (evalDataRaw.vab?.[pk] || []).map((v, i) => {
@@ -1330,7 +1330,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
           div3.style.position = 'relative';
           containerDiv.appendChild(div3);
           
-          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p));
           let vTraces = [];
           if (is20PercentRaw) {
              const vavg = (evalDataRaw.vab?.[pk] || []).map((v, i) => {
@@ -1499,7 +1499,7 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
 
           // 20% projects show a single averaged voltage trace (Vavg), matching
           // the fig4 "Reactive Power & Voltage" subplot and the in-app panels.
-          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p));
           let vTraces = [];
           if (is20PercentRaw) {
              const vavg = (evalDataRaw.vab?.[pk] || []).map((v, i) => {

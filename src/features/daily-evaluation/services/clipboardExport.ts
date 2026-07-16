@@ -1,5 +1,6 @@
 // @ts-ignore - distribution bundle avoids node polyfill issues in Vite
 import Plotly from 'plotly.js/dist/plotly.js';
+import { is20PercentProject } from '@/lib/project-detection';
 import type { EvalData } from '@/types/eval-data';
 import type { ActiveMetric, GraphConfig } from '@/types/graph';
 
@@ -130,7 +131,7 @@ export const copyChartsToClipboard = async ({ container, evalData, project, acti
             });
           };
 
-          const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+          const isBessProject = is20PercentProject(project);
           const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalData.soc.plant3 && evalData.soc.plant3.some((v) => !isNaN(v));
           const getStatus = (val: number) => val < 0.5 ? 'Take action' : val < 0.8 ? 'Warning' : (project === 'SNTL400' && val > 1 ? 'Alert' : 'Normal');
 

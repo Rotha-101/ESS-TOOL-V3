@@ -4,6 +4,7 @@ import type { Config } from 'plotly.js';
 import { Database } from 'lucide-react';
 import { DraggableOverlay } from '@/components/DraggableOverlay';
 import { getProjectPlants } from '@/lib/project-utils';
+import { is20PercentProject } from '@/lib/project-detection';
 import { getStatusJSX } from '../utils/status';
 import type { EvalData, PlantKey } from '@/types/eval-data';
 import type { ActiveMetric, GraphConfig, PinnedPoint } from '@/types/graph';
@@ -78,7 +79,7 @@ export const GraphPanels = React.memo(function GraphPanels({
 
     const isDarkMode = theme === 'dark';
     const pKey = selectedPlant;
-    const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].includes(project);
+    const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p));
     const getVTraces = (data: any, pk: string) => {
       if (is20PercentRaw) {
         let vavg = data.vab?.[pk] ? vavgCache.current.get(data.vab[pk]) : undefined;
@@ -396,7 +397,7 @@ export const GraphPanels = React.memo(function GraphPanels({
     };
 
     if (activeMetric === 'f_p') {
-      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBessProject = is20PercentProject(project);
       const hasPlant2 = (evalData.pTotal.plant2 && evalData.pTotal.plant2.some(v => !isNaN(v))) || (evalData.soc.plant2 && evalData.soc.plant2.some(v => !isNaN(v)));
       const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalData.soc.plant3 && evalData.soc.plant3.some(v => !isNaN(v));
       const drawPanel1 = (pk: 'plant1' | 'plant2' | 'plant3', title: string) => (
@@ -424,7 +425,7 @@ export const GraphPanels = React.memo(function GraphPanels({
     }
 
     if (activeMetric === 'soc_p') {
-      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBessProject = is20PercentProject(project);
       const hasPlant2 = (evalData.pTotal.plant2 && evalData.pTotal.plant2.some(v => !isNaN(v))) || (evalData.soc.plant2 && evalData.soc.plant2.some(v => !isNaN(v)));
       const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalData.soc.plant3 && evalData.soc.plant3.some(v => !isNaN(v));
       const drawPanel2 = (pk: 'plant1' | 'plant2' | 'plant3', title: string) => (
@@ -456,7 +457,7 @@ export const GraphPanels = React.memo(function GraphPanels({
     }
 
     if (activeMetric === 'v_q') {
-      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBessProject = is20PercentProject(project);
       const hasPlant2 = (evalData.pTotal.plant2 && evalData.pTotal.plant2.some(v => !isNaN(v))) || (evalData.soc.plant2 && evalData.soc.plant2.some(v => !isNaN(v)));
       const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalData.soc.plant3 && evalData.soc.plant3.some(v => !isNaN(v));
       const drawPanel3 = (pk: 'plant1' | 'plant2' | 'plant3', title: string) => (
@@ -541,7 +542,7 @@ export const GraphPanels = React.memo(function GraphPanels({
 
 
     if (activeMetric === 'fig4') {
-      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBessProject = is20PercentProject(project);
       const hasPlant2 = (evalData.pTotal.plant2 && evalData.pTotal.plant2.some(v => !isNaN(v))) || (evalData.soc.plant2 && evalData.soc.plant2.some(v => !isNaN(v)));
       const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalData.soc.plant3 && evalData.soc.plant3.some(v => !isNaN(v));
       const drawPanel4 = (pk: 'plant1' | 'plant2' | 'plant3', title: string) => (
@@ -600,7 +601,7 @@ export const GraphPanels = React.memo(function GraphPanels({
     }
 
     if (activeMetric === 'fig5') {
-      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBessProject = is20PercentProject(project);
       const hasPlant2 = (evalData.pTotal.plant2 && evalData.pTotal.plant2.some(v => !isNaN(v))) || (evalData.soc.plant2 && evalData.soc.plant2.some(v => !isNaN(v)));
       const plants = getProjectPlants(typeof project === 'string' ? project : '');
       const hasPlant3 = plants.includes('plant3') && evalData.soc.plant3 && evalData.soc.plant3.some((v) => !isNaN(v));
@@ -807,7 +808,7 @@ export const GraphPanels = React.memo(function GraphPanels({
     }
 
     if (activeMetric === 'fig6') {
-      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBessProject = is20PercentProject(project);
       const hasPlant2 = (evalData.pTotal.plant2 && evalData.pTotal.plant2.some(v => !isNaN(v))) || (evalData.soc.plant2 && evalData.soc.plant2.some(v => !isNaN(v)));
       const plants = getProjectPlants(typeof project === 'string' ? project : '');
       const hasPlant3 = plants.includes('plant3') && evalData.soc.plant3 && evalData.soc.plant3.some((v) => !isNaN(v));

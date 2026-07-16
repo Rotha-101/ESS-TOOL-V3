@@ -80,7 +80,7 @@ export function generatePortableViewHtml(
       <select id="select-active-metric" onchange="changeMetric(this.value)" class="h-6 bg-gray-100 dark:bg-[#0F172A] border border-gray-300 dark:border-gray-700 rounded px-1.5 text-[10px] text-gray-900 dark:text-white focus:outline-none focus:border-accentBlue font-bold font-mono">
         ${(() => {
           const p = getProjectPlants(project);
-          const isBess = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
+          const isBess = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('DMF') || project.startsWith('SNTZ') || project.startsWith('MSGP');
           if (isBess) {
             return `
           <option value="fig4">Figure 1: Daily Evaluation</option>
@@ -1091,8 +1091,8 @@ export function generatePortableViewHtml(
           applyTrace({ y: (evalDataRaw.cmdQ?.[pk] || []), type: 'scatter', mode: 'lines', name: ((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v)) ? 'Q command from NCC' : 'Q command from NCC (No Data)', showlegend: Boolean(((evalDataRaw.cmdQ?.[pk] || []) || []).some(v => v != null && !isNaN(v))), yaxis: 'y2', line: { color: '#000000', width: 1.8, shape: 'hv', dash: 'longdash' } }, 4)
         ], getMATLABLayout('Reactive Power & Voltage', 'V (kV)', 'Q (MVar)', centeredYLim([(evalDataRaw.qTotal?.[pk] || []), (evalDataRaw.cmdQ?.[pk] || []), evalDataRaw.qBess && (evalDataRaw.qBess?.[pk] || [])], 0), [20, 25.6], activeMetric + '_vq_' + pk), activeMetric + '_vq_' + pk);
       } else if (activeMetric === 'fig4') {
-        const isBessProject = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP');
-        const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+        const isBessProject = project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('DMF') || project.startsWith('SNTZ') || project.startsWith('MSGP');
+        const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p));
         
         const hasPlant2 = (evalDataRaw.pTotal.plant2 && evalDataRaw.pTotal.plant2.some(v => v != null && !isNaN(v))) || (evalDataRaw.soc.plant2 && evalDataRaw.soc.plant2.some(v => v != null && !isNaN(v)));
         const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalDataRaw.soc.plant3 && evalDataRaw.soc.plant3.some(v => v != null && !isNaN(v));

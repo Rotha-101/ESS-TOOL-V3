@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { useAIContext } from '@/lib/ai-context';
 import { expandZip, hcByProject } from '@/lib/audit-engine.js';
 import { getProjectPlants } from '@/lib/project-utils';
+import { is20PercentProject } from '@/lib/project-detection';
 import { useAppStore } from '@/store/useAppStore';
 import { DraggableOverlay } from '@/components/DraggableOverlay';
 import type { EvalData } from '@/types/eval-data';
@@ -259,7 +260,7 @@ export function DailyEvaluationGraph({
               <SelectContent>
                 {(() => {
                   const p = getProjectPlants(typeof project === 'string' ? project : '');
-                  const isBess = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+                  const isBess = is20PercentProject(project);
                   if (isBess) {
                     return (
                       <>
@@ -544,7 +545,7 @@ export function DailyEvaluationGraph({
               <label className="text-[9px] font-bold uppercase tracking-wider text-foreground/40 border-b border-border-v/50 pb-1 mb-1 mt-2">2. Plot Configuration</label>
               <div className="flex flex-col gap-1 font-mono text-[10px]">
                 {(() => {
-                  const isBess = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+                  const isBess = is20PercentProject(project);
                   const currentPlants = getProjectPlants(typeof project === 'string' ? project : '');
 
                   if (isBess) {
@@ -606,7 +607,7 @@ export function DailyEvaluationGraph({
                         activeMetric === 'f_p' ? 'Fig 1 (Frequency & P)' :
                           activeMetric === 'soc_p' ? 'Fig 2 (SOC & P)' :
                             activeMetric === 'v_q' ? 'Fig 3 (Voltage & Q)' :
-                              activeMetric === 'fig4' ? (typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP')) ? 'Fig 1 (Daily Evaluation)' : 'Fig 4 (Powerflow check)') :
+                              activeMetric === 'fig4' ? (is20PercentProject(project) ? 'Fig 1 (Daily Evaluation)' : 'Fig 4 (Powerflow check)') :
                                 activeMetric === 'fig5' ? `Fig ${getProjectPlants(typeof project === 'string' ? project : '').length + 1} (Active Power & SOC All Plants)` :
                                   `Fig ${getProjectPlants(typeof project === 'string' ? project : '').length + 2} (Voltage & Reactive Power All Plants)`}
                 </span>

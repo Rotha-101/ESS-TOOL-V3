@@ -4,7 +4,7 @@
 // App.tsx, CycleCalculation, DailyEvaluationGraph, PowerFlowMode,
 // audit-engine, exportGraphs and exportMatlab.
 
-export const BESS_PROJECT_PREFIXES = ['SNTB', 'SNTV', 'SNTD', 'SNTZ', 'MSGP'] as const;
+export const BESS_PROJECT_PREFIXES = ['SNTB', 'SNTV', 'SNTD', 'DMF', 'SNTZ', 'MSGP'] as const;
 
 export const isBessProject = (project: unknown): boolean =>
   typeof project === 'string' && BESS_PROJECT_PREFIXES.some(p => project.startsWith(p));

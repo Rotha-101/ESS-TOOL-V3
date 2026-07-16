@@ -370,7 +370,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
       'f_p': 'Frequency & Active Power (All Plants)',
       'soc_p': 'SOC & Active Power (All Plants)',
       'v_q': 'Reactive Power & Voltage (All Plants)',
-      'fig4': ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'MSGP'].some(p => project.startsWith(p)) ? 'Daily Evaluation' : 'Powerflow (Daily Check) All Plants',
+      'fig4': ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p)) ? 'Daily Evaluation' : 'Powerflow (Daily Check) All Plants',
       'fig5': 'Active Power & SOC (All Plants)',
       'fig6': 'Reactive Power & Voltage (All Plants)',
       'pf_p1': 'SWG01 Powerflow Check',
@@ -620,7 +620,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
               });
             };
 
-            const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+            const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('DMF') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
             const hasPlant3 = !isBessProject && typeof project !== 'undefined' && project !== 'SNTL400' && evalDataRaw.soc.plant3 && evalDataRaw.soc.plant3.some(v => !isNaN(v));
             const prj = typeof project !== 'undefined' ? project : 'Unknown';
             const getStatus = (val) => getStatusHTML(val, prj);
@@ -1111,7 +1111,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
         toImageButtonOptions: { format: 'png', filename: 'plot_export', scale: 2 }
       };
 
-      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
+      const isBessProject = typeof project === 'string' && (project.startsWith('SNTB') || project.startsWith('SNTV') || project.startsWith('SNTD') || project.startsWith('DMF') || project.startsWith('SNTZ') || project.startsWith('MSGP'));
       const hasPlant3 = !isBessProject && project !== 'SNTL400' && evalDataRaw.soc.plant3 && evalDataRaw.soc.plant3.some(v => !isNaN(v));
       const plants = isBessProject ? ['plant1'] : ['plant1', 'plant2'];
       if (hasPlant3) plants.push('plant3');
@@ -1166,7 +1166,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
 
           // 20% projects show a single averaged voltage trace (Vavg), matching
           // the fig4 "Reactive Power & Voltage" subplot and the in-app panels.
-          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p));
           let vTraces = [];
           if (is20PercentRaw) {
              const vavg = (evalDataRaw.vab?.[pk] || []).map((v, i) => {
@@ -1300,7 +1300,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
           div3.style.position = 'relative';
           containerDiv.appendChild(div3);
           
-          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p));
           let vTraces = [];
           if (is20PercentRaw) {
              const vavg = (evalDataRaw.vab?.[pk] || []).map((v, i) => {
@@ -1447,7 +1447,7 @@ export const exportSingleGraphHtml = async ({ evalData, project, showNccPCommand
 
           // 20% projects show a single averaged voltage trace (Vavg), matching
           // the fig4 "Reactive Power & Voltage" subplot and the in-app panels.
-          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].some(p => project.startsWith(p));
+          const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX', 'SNTD', 'DMF', 'MSGP'].some(p => project.startsWith(p));
           let vTraces = [];
           if (is20PercentRaw) {
              const vavg = (evalDataRaw.vab?.[pk] || []).map((v, i) => {
