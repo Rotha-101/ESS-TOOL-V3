@@ -106,8 +106,10 @@ export const usePinnedPoints = ({ initial, activeMetric, selectedPlant }: {
     return () => document.removeEventListener('mousedown', handleMousedown, true);
   }, []);
 
-  // Clear pins when switching figures or plants
-  useEffect(() => { setPinnedPoints([]); }, [activeMetric, selectedPlant]);
+  // Clear pins when switching figures or plants. Bail out with the same
+  // reference when already empty — otherwise every figure switch commits a
+  // new [] and forces a second full re-render (and Plotly redraw) for nothing.
+  useEffect(() => { setPinnedPoints(prev => (prev.length === 0 ? prev : [])); }, [activeMetric, selectedPlant]);
 
   return { pinnedPoints, setPinnedPoints, handleHover, handleUnhover, handleRelayout, handleClickAnnotation };
 };

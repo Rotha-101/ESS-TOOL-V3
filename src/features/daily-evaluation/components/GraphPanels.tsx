@@ -35,6 +35,35 @@ export const GraphPanels = React.memo(function GraphPanels({
   const filterCache = useRef(new WeakMap());
   const lastTimeHash = useRef('');
 
+  // Per-source-array caches so the O(86,400)-per-trace work (hover rounding,
+  // has-data scans, Vavg derivation, step-signal decimation) runs once per
+  // dataset instead of on every render/figure switch. Keys are the source
+  // arrays themselves: a new dataset means new arrays, so stale entries are
+  // simply garbage-collected. Results are pure functions of the keyed array,
+  // so cached values are byte-identical to what the inline code produced.
+  const roundCache = useRef(new WeakMap<any[], Map<number, any[]>>());
+  const roundArrCached = (arr: any[], decimals: number) => {
+    let byDec = roundCache.current.get(arr);
+    if (!byDec) { byDec = new Map(); roundCache.current.set(arr, byDec); }
+    let out = byDec.get(decimals);
+    if (!out) {
+      out = arr.map(v => (v != null && typeof v === 'number' && !isNaN(v)) ? Number(v.toFixed(decimals)) : v);
+      byDec.set(decimals, out);
+    }
+    return out;
+  };
+  const hasDataCache = useRef(new WeakMap<any[], boolean>());
+  const hasValidDataCached = (arr: any[]) => {
+    let v = hasDataCache.current.get(arr);
+    if (v === undefined) {
+      v = arr.some((x) => x != null && !isNaN(x));
+      hasDataCache.current.set(arr, v);
+    }
+    return v;
+  };
+  const vavgCache = useRef(new WeakMap<any[], any[]>());
+  const decimateCache = useRef(new WeakMap<any[], { srcX: any[]; dx: any[]; dy: any[] }>());
+
   const renderPlot = () => {
     // Large, beautiful glassmorphic Empty State Dropzone when no data is loaded
     if (!evalData) {
@@ -52,13 +81,17 @@ export const GraphPanels = React.memo(function GraphPanels({
     const is20PercentRaw = ['SNTB', 'SNTV', 'SNTZ', 'SNTX'].includes(project);
     const getVTraces = (data: any, pk: string) => {
       if (is20PercentRaw) {
-        const vavg = data.vab?.[pk]?.map((v: number, i: number) => {
-          if (v == null || isNaN(v)) return NaN;
-          const v2 = data.vbc?.[pk]?.[i];
-          const v3 = data.vca?.[pk]?.[i];
-          if (v2 == null || isNaN(v2) || v3 == null || isNaN(v3)) return NaN;
-          return (v + v2 + v3) / 3;
-        });
+        let vavg = data.vab?.[pk] ? vavgCache.current.get(data.vab[pk]) : undefined;
+        if (data.vab?.[pk] && !vavg) {
+          vavg = data.vab[pk].map((v: number, i: number) => {
+            if (v == null || isNaN(v)) return NaN;
+            const v2 = data.vbc?.[pk]?.[i];
+            const v3 = data.vca?.[pk]?.[i];
+            if (v2 == null || isNaN(v2) || v3 == null || isNaN(v3)) return NaN;
+            return (v + v2 + v3) / 3;
+          });
+          vavgCache.current.set(data.vab[pk], vavg!);
+        }
         return [
           applyTrace({ x: filteredTimeX, y: vavg, type: 'scattergl', mode: 'lines', name: 'Vavg (kV)', line: { color: '#0072BD', width: 1.2 } }, 0)
         ];
@@ -157,17 +190,17 @@ export const GraphPanels = React.memo(function GraphPanels({
       }
 
       const isNoData = trace.name && trace.name.includes('(No Data)');
-      const hasValidData = trace.y && trace.y.some((v) => v != null && !isNaN(v));
+      const hasValidData = trace.y && (Array.isArray(trace.y) ? hasValidDataCached(trace.y) : trace.y.some((v: any) => v != null && !isNaN(v)));
       const hideLegend = isNoData || !hasValidData;
       let newY = trace.y;
       let hoverTpl = trace.hovertemplate;
       if (trace.name && newY && Array.isArray(newY)) {
         const tName = trace.name.toLowerCase();
         if (tName.includes('soc')) {
-          newY = newY.map(v => (v != null && typeof v === 'number' && !isNaN(v)) ? Number(v.toFixed(1)) : v);
+          newY = roundArrCached(newY, 1);
           hoverTpl = '(%{x}, %{y:.1f})';
         } else if (tName.includes('p ') || tName.startsWith('p ') || tName.includes('active power') || tName.includes('q ') || tName.startsWith('q ') || tName.includes('reactive power') || tName.includes('q total') || tName.includes('q (bess)')) {
-          newY = newY.map(v => (v != null && typeof v === 'number' && !isNaN(v)) ? Number(v.toFixed(2)) : v);
+          newY = roundArrCached(newY, 2);
           hoverTpl = '(%{x}, %{y:.2f})';
         }
       }
@@ -177,6 +210,11 @@ export const GraphPanels = React.memo(function GraphPanels({
 
       // Decimate points for command signals to fix Plotly dash rendering bug on dense data
       if (trace.name && (trace.name.includes('command from NCC') || trace.name.includes('Remote Active Power')) && finalY && finalY.length > 0) {
+        const cached = decimateCache.current.get(finalY);
+        if (cached && cached.srcX === finalX) {
+          finalX = cached.dx;
+          finalY = cached.dy;
+        } else {
           const decY = [];
           const decX = [];
           let lastY = undefined;
@@ -189,8 +227,10 @@ export const GraphPanels = React.memo(function GraphPanels({
                   lastY = val;
               }
           }
+          decimateCache.current.set(finalY, { srcX: finalX, dx: decX, dy: decY });
           finalY = decY;
           finalX = decX;
+        }
       }
 
       return {
