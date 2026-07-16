@@ -28,3 +28,13 @@ Data/
 
 Release/
 *.cjs
+
+# Scratch/debug artifacts
+diff.txt
+test-export.*
+test.html
+test_output.html
+test_parser_extract.txt
+test_gen.ts
+test_script.ts
+Data.zip

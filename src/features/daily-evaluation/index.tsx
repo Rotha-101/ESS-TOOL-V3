@@ -13,27 +13,28 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { useAIContext } from '../lib/ai-context';
-import { expandZip, hcByProject } from '../lib/audit-engine.js';
-import { getProjectPlants } from '../lib/project-utils';
-import { useAppStore } from '../store/useAppStore';
-import { DraggableOverlay } from './DraggableOverlay';
-import type { EvalData } from '../types/eval-data';
-import type { ActiveMetric, GraphConfig, PinnedPoint } from '../types/graph';
-import { parseEvaluationFiles } from '../features/daily-evaluation/services/evaluationParser';
-import { mergeNccFile } from '../features/daily-evaluation/services/nccMerge';
-import { downloadExcelLogs } from '../features/daily-evaluation/services/excelLogExport';
-import { copyChartsToClipboard } from '../features/daily-evaluation/services/clipboardExport';
-import { exportSingleGraphHtml } from '../features/daily-evaluation/services/htmlExportSingle';
-import { exportAllGraphsHtml } from '../features/daily-evaluation/services/htmlExportAll';
-import { getStatusHTML, getStatusJSX } from '../features/daily-evaluation/utils/status';
-import { defaultGraphConfig } from '../features/daily-evaluation/config/defaultGraphConfig';
-import { useSelection } from '../features/daily-evaluation/hooks/useSelection';
-import { useEvalData } from '../features/daily-evaluation/hooks/useEvalData';
-import { useGraphConfig } from '../features/daily-evaluation/hooks/useGraphConfig';
-import { usePinnedPoints } from '../features/daily-evaluation/hooks/usePinnedPoints';
-import { GraphPanels } from '../features/daily-evaluation/components/GraphPanels';
-import { CustomizationDrawer } from '../features/daily-evaluation/components/CustomizationDrawer';
+import { useAIContext } from '@/lib/ai-context';
+import { expandZip, hcByProject } from '@/lib/audit-engine.js';
+import { getProjectPlants } from '@/lib/project-utils';
+import { useAppStore } from '@/store/useAppStore';
+import { DraggableOverlay } from '@/components/DraggableOverlay';
+import type { EvalData } from '@/types/eval-data';
+import type { ActiveMetric, GraphConfig, PinnedPoint } from '@/types/graph';
+import { parseEvaluationFiles } from './services/evaluationParser';
+import { mergeNccFile } from './services/nccMerge';
+import { downloadExcelLogs } from './services/excelLogExport';
+import { copyChartsToClipboard } from './services/clipboardExport';
+import { exportSingleGraphHtml } from './services/htmlExportSingle';
+import { exportAllGraphsHtml } from './services/htmlExportAll';
+import { getStatusHTML, getStatusJSX } from './utils/status';
+import { defaultGraphConfig } from './config/defaultGraphConfig';
+import { useSelection } from './hooks/useSelection';
+import { useEvalData } from './hooks/useEvalData';
+import { useGraphConfig } from './hooks/useGraphConfig';
+import { usePinnedPoints } from './hooks/usePinnedPoints';
+import { useExportEvents } from './hooks/useExportEvents';
+import { GraphPanels } from './components/GraphPanels';
+import { CustomizationDrawer } from './components/CustomizationDrawer';
 
 
 
@@ -239,27 +240,7 @@ export function DailyEvaluationGraph({
     await exportAllGraphsHtml({ evalData, project, showNccPCommand, graphConfig, activeMetric, selectedPlant, pinnedPoints });
   };
 
-  const exportRefs = useRef({ handleExportHtml, handleExportAllHtml, evalData });
-  useEffect(() => {
-    exportRefs.current = { handleExportHtml, handleExportAllHtml, evalData };
-  });
-
-  useEffect(() => {
-    (window as any).isGraphMounted = true;
-    const handleSingle = () => {
-      if (exportRefs.current.evalData) exportRefs.current.handleExportHtml();
-    };
-    const handleAll = () => {
-      if (exportRefs.current.evalData) exportRefs.current.handleExportAllHtml();
-    };
-    document.addEventListener('export-html-single', handleSingle);
-    document.addEventListener('export-html-all', handleAll);
-    return () => {
-      (window as any).isGraphMounted = false;
-      document.removeEventListener('export-html-single', handleSingle);
-      document.removeEventListener('export-html-all', handleAll);
-    };
-  }, []);
+  useExportEvents(handleExportHtml, handleExportAllHtml, evalData);
 
   return (
     <section className="flex-1 min-h-0 bg-panel border border-border-v rounded-sm flex flex-col relative overflow-hidden">

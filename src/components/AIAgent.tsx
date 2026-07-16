@@ -5,7 +5,7 @@ import { GEMINI_MODEL } from '../lib/ai-config';
 import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
 import { useAIContext } from '../lib/ai-context';
-import { DailyEvaluationGraph } from "./DailyEvaluationGraph";
+import { DailyEvaluationGraph } from "../features/daily-evaluation";
 import {
   Select,
   SelectContent,

@@ -57,11 +57,11 @@ import { NavItem } from './components/NavItem';
 import { KpiCard } from './components/KpiCard';
 import { ValidationDebug } from './components/ValidationDebug';
 import { CycleCalculation } from './components/CycleCalculation';
-import { DailyEvaluationGraph } from './components/DailyEvaluationGraph';
+import { DailyEvaluationGraph } from './features/daily-evaluation';
 import { SettingsWindow } from './components/SettingsWindow';
 import { GlobalProgressModal } from './components/GlobalProgressModal';
 
-export { DailyEvaluationGraph } from './components/DailyEvaluationGraph';
+export { DailyEvaluationGraph } from './features/daily-evaluation';
 
 export default function App() {
   const {
