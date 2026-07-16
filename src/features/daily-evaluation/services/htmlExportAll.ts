@@ -376,6 +376,19 @@ export const exportAllGraphsHtml = async ({ evalData, project, showNccPCommand, 
       return '<span style="color:#22C55E">\\u{1F7E2} Normal</span>';
     };
 
+    // Normalize the initial figure to this project's ACTIVE GRAPH list (same
+    // branching as the select options above). The app can export while still
+    // holding a metric from a previously selected project (e.g. pf_p1 kept
+    // after switching SNTL400 -> SNTV), which is not valid here; fall back to
+    // the project's Figure 1 and keep the dropdown in sync.
+    const availableMetrics = project === 'SNTL400' ? ['pf_p1', 'pf_p2', 'fig5', 'fig6']
+      : project === 'SNTL600' ? ['pf_p1', 'pf_p2', 'pf_p3', 'fig5', 'fig6']
+      : ['SNTV', 'SNTB', 'SNTZ', 'SNTX', 'SNTD', 'MSGP'].some(p => project.startsWith(p)) ? ['fig4', 'fig5', 'fig6']
+      : ['f_p', 'soc_p', 'v_q', 'fig4', 'fig5', 'fig6'];
+    if (availableMetrics.indexOf(activeMetric) === -1) activeMetric = availableMetrics[0];
+    const metricSelectEl = document.getElementById('select-active-metric');
+    if (metricSelectEl) metricSelectEl.value = activeMetric;
+
     const metricLabels = {
       'f_p': 'Frequency & Active Power (All Plants)',
       'soc_p': 'SOC & Active Power (All Plants)',
