@@ -7,15 +7,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveMatlabFigures: (data) => ipcRenderer.invoke('save-matlab-figures', data)
 });
 
-// Shared graph repository. The renderer never touches the filesystem directly;
-// it passes the configured root path with each call so the main process holds
-// no sync state of its own.
+// Shared graph repository. The renderer never talks to the network directly; it
+// passes the configured server URL with each call, so the main process holds no
+// sync state of its own.
+//
+// Note there is no getKey: the access key can be set, cleared and tested for,
+// but never read back into the renderer.
 contextBridge.exposeInMainWorld('syncAPI', {
   identity: () => ipcRenderer.invoke('sync:identity'),
-  probe: (root) => ipcRenderer.invoke('sync:probe', root),
-  list: (root) => ipcRenderer.invoke('sync:list', root),
-  fetchMeta: (root, ref) => ipcRenderer.invoke('sync:fetch-meta', root, ref),
-  fetchPayload: (root, ref) => ipcRenderer.invoke('sync:fetch-payload', root, ref),
-  put: (root, meta, payload) => ipcRenderer.invoke('sync:put', root, meta, payload),
-  chooseFolder: () => ipcRenderer.invoke('sync:choose-folder')
+  probe: (baseUrl) => ipcRenderer.invoke('sync:probe', baseUrl),
+  list: (baseUrl) => ipcRenderer.invoke('sync:list', baseUrl),
+  fetchMeta: (baseUrl, ref) => ipcRenderer.invoke('sync:fetch-meta', baseUrl, ref),
+  fetchPayload: (baseUrl, ref) => ipcRenderer.invoke('sync:fetch-payload', baseUrl, ref),
+  put: (baseUrl, meta, payload) => ipcRenderer.invoke('sync:put', baseUrl, meta, payload),
+  hasKey: () => ipcRenderer.invoke('sync:has-key'),
+  setKey: (key) => ipcRenderer.invoke('sync:set-key', key),
+  clearKey: () => ipcRenderer.invoke('sync:clear-key')
 });

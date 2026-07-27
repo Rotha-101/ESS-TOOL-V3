@@ -1,0 +1,18 @@
+{
+  "name": "ess-graph-repository-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker backing the ESS shared graph repository",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate": "wrangler d1 execute ess-graph-repository --remote --file=migrations/0001_init.sql",
+    "migrate:local": "wrangler d1 execute ess-graph-repository --local --file=migrations/0001_init.sql",
+    "make-key": "node scripts/make-key.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "typescript": "~5.8.2",
+    "wrangler": "^4.0.0"
+  }
+}

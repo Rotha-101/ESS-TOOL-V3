@@ -22,5 +22,9 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  // server/ is a separate deployable (Cloudflare Worker) with its own tsconfig
+  // and its own Workers type definitions. Typechecking it from here would
+  // require the app to depend on @cloudflare/workers-types for no reason.
+  "exclude": ["node_modules", "dist", "Release", "server"]
 }

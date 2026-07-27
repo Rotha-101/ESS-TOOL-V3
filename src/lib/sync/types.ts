@@ -18,9 +18,15 @@ export interface RecordRef {
 
 export interface TransportStatus {
   reachable: boolean;
-  /** Drives the Engineer / Management distinction: the role IS the permission. */
+  /** Drives the Engineer / Management distinction. Comes from the account's
+   *  role on the server, which is authoritative — a patched client cannot
+   *  publish by setting this true, because the server refuses the write. */
   writable: boolean;
   schemaVersion?: number | null;
+  /** Who the server says you are. Display only; never used for attribution,
+   *  which the server writes itself. */
+  userName?: string | null;
+  role?: string | null;
   /** Human-readable and actionable; shown directly in Settings. */
   error?: string | null;
 }
@@ -39,15 +45,20 @@ export interface SyncTransport {
   putRecord(meta: GraphRecordMeta, payload: Uint8Array): Promise<PutOutcome>;
 }
 
-/** Shape exposed by electron/preload.cjs. */
+/** Shape exposed by electron/preload.cjs.
+ *
+ *  Note the absence of any `getKey`: the access key can be set, cleared and
+ *  tested for, but never read back into the renderer. */
 export interface SyncBridge {
   identity(): Promise<{ ok: boolean; userName?: string; machineName?: string; error?: string }>;
-  probe(root: string): Promise<any>;
-  list(root: string): Promise<any>;
-  fetchMeta(root: string, ref: RecordRef): Promise<any>;
-  fetchPayload(root: string, ref: RecordRef): Promise<any>;
-  put(root: string, meta: GraphRecordMeta, payload: Uint8Array): Promise<any>;
-  chooseFolder(): Promise<string | null>;
+  probe(baseUrl: string): Promise<any>;
+  list(baseUrl: string): Promise<any>;
+  fetchMeta(baseUrl: string, ref: RecordRef): Promise<any>;
+  fetchPayload(baseUrl: string, ref: RecordRef): Promise<any>;
+  put(baseUrl: string, meta: GraphRecordMeta, payload: Uint8Array): Promise<any>;
+  hasKey(): Promise<{ ok: boolean; hasKey?: boolean; error?: string }>;
+  setKey(key: string): Promise<{ ok: boolean; encrypted?: boolean; error?: string }>;
+  clearKey(): Promise<{ ok: boolean; error?: string }>;
 }
 
 export const getSyncBridge = (): SyncBridge | null =>

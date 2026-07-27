@@ -29,7 +29,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAIContext } from '../lib/ai-context';
 import { useAppStore } from '../store/useAppStore';
-import { SharedFolderSettings } from './SharedFolderSettings';
+import { RepositorySettings } from './RepositorySettings';
 
 export function SettingsWindow({ onClose, isMaximized, onToggleMaximize }: { onClose: () => void, isMaximized: boolean, onToggleMaximize: () => void }) {
   const [activeMenu, setActiveMenu] = useState('general');
@@ -122,7 +122,7 @@ export function SettingsWindow({ onClose, isMaximized, onToggleMaximize }: { onC
                   </div>
                 </div>
 
-                <SharedFolderSettings />
+                <RepositorySettings />
 
                 <div className="space-y-4">
                   <h3 className="text-[11px] font-bold uppercase tracking-widest text-foreground/40 mb-2 border-b border-border-v pb-2 flex items-center gap-2">

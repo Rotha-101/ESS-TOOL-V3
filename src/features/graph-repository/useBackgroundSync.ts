@@ -6,19 +6,24 @@
 // loop. One owner means duplicate passes are impossible by construction.
 //
 // Scheduling is a chained setTimeout rather than setInterval: each pass picks
-// its own next delay, so backing off while the share is unreachable needs no
+// its own next delay, so backing off while the service is unreachable needs no
 // extra state. Two delays are enough —
 //
 //   connected    → 5 minutes
-//   unreachable  → 15 minutes, because an unreachable UNC path can block for
-//                  ~20 s in the OS before failing, and retrying that every
-//                  5 minutes is the opposite of low resource usage
+//   unreachable  → 15 minutes, because a failed request can sit through DNS
+//                  and TCP timeouts before giving up, and retrying that every
+//                  5 minutes wastes battery and metered data for nothing
 //
-// A window-focus trigger closes the gap: when someone returns to the app after
-// the network comes back, sync happens immediately rather than up to 15
-// minutes later. navigator.onLine is deliberately NOT used — it reports
-// internet connectivity, which says nothing about whether a LAN share is
-// reachable.
+// Two triggers close the gap so a reconnect is not waited out:
+//
+//   window focus  — the user came back to the app
+//   online event  — the machine regained connectivity
+//
+// The `online` event is only a hint (it can fire behind a captive portal), so
+// it merely schedules a pass; probe() still decides. It was deliberately NOT
+// used by the shared-folder transport, where internet connectivity said nothing
+// about whether a LAN share was reachable — over HTTP it is exactly the right
+// signal.
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
@@ -43,26 +48,26 @@ export function useBackgroundSync() {
   const setLastKnownWritable = useAppStore((s) => s.setLastKnownWritable);
   const bumpGraphHistoryVersion = useAppStore((s) => s.bumpGraphHistoryVersion);
   const syncRequestVersion = useAppStore((s) => s.syncRequestVersion);
-  const sharedFolderPath = useAppStore((s) => s.sharedFolderPath);
-  const enabled = useAppStore((s) => s.sharedFolderSyncEnabled);
+  const serverUrl = useAppStore((s) => s.serverUrl);
+  const enabled = useAppStore((s) => s.syncEnabled);
 
   // Read config at call time so editing the path in Settings takes effect on
   // the next pass without tearing down and rebuilding the timer.
-  const config = useRef({ sharedFolderPath, enabled });
-  config.current = { sharedFolderPath, enabled };
+  const config = useRef({ serverUrl, enabled });
+  config.current = { serverUrl, enabled };
 
   const lastAttemptAt = useRef(0);
 
   /** One pass. Resolves to the resulting phase so the loop can pick its delay. */
   const sync = useCallback(async (): Promise<SyncState['phase']> => {
-    const { sharedFolderPath: root, enabled: on } = config.current;
+    const { serverUrl: root, enabled: on } = config.current;
 
     if (!on) {
-      setSyncState({ phase: 'idle', message: 'Shared folder sync is turned off.' });
+      setSyncState({ phase: 'idle', message: 'Synchronization is turned off.' });
       return 'idle';
     }
     if (!root) {
-      setSyncState({ phase: 'idle', message: 'No shared folder configured yet.' });
+      setSyncState({ phase: 'idle', message: 'No server configured yet.' });
       return 'idle';
     }
     if (passInFlight) {
@@ -87,10 +92,10 @@ export function useBackgroundSync() {
           phase,
           writable: false,
           pending,
-          message: result.status.error || 'Shared folder unavailable — working from local history.',
+          message: result.status.error || 'Server unavailable — working from local history.',
         });
       } else {
-        // The share answered, so this is the authoritative access answer.
+        // The server answered, so this is the authoritative access answer.
         // Remembered so the next launch renders the right UI immediately.
         setLastKnownWritable(result.status.writable);
 
@@ -156,13 +161,19 @@ export function useBackgroundSync() {
     if (syncRequestVersion > 0) void sync();
   }, [syncRequestVersion, sync]);
 
-  // Returning to the app is the cheapest reliable hint that the network may
-  // have come back.
+  // Returning to the app, or the machine regaining connectivity, are both cheap
+  // hints that a retry is worth attempting now rather than at the next tick.
+  // Neither is treated as truth — probe() still decides.
   useEffect(() => {
-    const onFocus = () => {
+    const retryIfStale = () => {
       if (Date.now() - lastAttemptAt.current > FOCUS_MIN_GAP) void sync();
     };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    const onOnline = () => void sync(); // rare, and always worth acting on
+    window.addEventListener('focus', retryIfStale);
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.removeEventListener('focus', retryIfStale);
+      window.removeEventListener('online', onOnline);
+    };
   }, [sync]);
 }

@@ -71,7 +71,7 @@ function makeTransport({ reachable = true, writable = true, remote = [], corrupt
   const puts = [];
   return {
     kind: 'fake', puts, store,
-    async probe() { return { reachable, writable, error: reachable ? null : 'Shared folder unavailable.' }; },
+    async probe() { return { reachable, writable, error: reachable ? null : 'Server unavailable.' }; },
     async listRecordIds() {
       if (throwOnList) throw new Error('SMB read failed');
       return [...store.entries()].map(([fileId, r]) => ({ id: fileId, project: r.meta.project, dataDate: r.meta.dataDate, year: '2026' }));
@@ -87,7 +87,7 @@ function makeTransport({ reachable = true, writable = true, remote = [], corrupt
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n=== 1. Shared folder unavailable (offline) ===');
+console.log('\n=== 1. Server unavailable (offline) ===');
 fake.reset();
 const localOnly = await makeRecord('local-1');
 fake.seedLocal(localOnly.meta, localOnly.payload, undefined); // pending upload

@@ -93,11 +93,11 @@ export default function App() {
   const project = getHcActiveProject() || 'SNTL1000';
   const { messages } = useAIContext();
 
-  // Sole owner of the shared-folder sync loop. Mounted here rather than in the
+  // Sole owner of the sync loop. Mounted here rather than in the
   // Graph Repository tab so history keeps syncing whatever the user is doing.
   useBackgroundSync();
 
-  // Read-only means the shared folder refused a write — Top Management. Every
+  // Read-only means the server reports a view-only account — Top Management. Every
   // other module in this app exists to import, generate or transform imported
   // data, none of which they can do, so the repository is the whole product for
   // them. Same .exe, same components; only the nav is filtered.

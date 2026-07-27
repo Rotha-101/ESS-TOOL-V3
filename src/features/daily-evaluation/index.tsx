@@ -299,7 +299,7 @@ export function DailyEvaluationGraph({
     onSaved: () => {
       bumpGraphHistoryVersion();
       // Publish straight away rather than waiting for the next scheduled pass,
-      // so colleagues see a new graph in seconds. No-op when no shared folder
+      // so colleagues see a new graph in seconds. No-op when no server
       // is configured or it is unreachable.
       requestSync();
     },

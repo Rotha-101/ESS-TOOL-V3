@@ -1,28 +1,28 @@
 /* END-TO-END: User A plots a graph -> it appears on User B's computer.
  *
  * The scenario this whole feature exists for. Two independent machines, each
- * with its own local storage, talking to one real folder on disk.
+ * with its own local storage, syncing through one running service.
  *
- * Uses the REAL code throughout: electron/sync/repository.cjs (what the
- * Electron main process calls), the real syncService, the real essg-v1 codec,
- * and the real buildGraphRecord/restoreEvalData. Only two things are stood in
- * for — IndexedDB (a per-machine in-memory map) and the IPC hop.
+ * Uses the REAL code on both sides: the actual Worker (against real SQLite
+ * running the real migration), the real syncService, the real essg-v1 codec and
+ * the real buildGraphRecord/restoreEvalData. Stood in for: IndexedDB (a
+ * per-machine in-memory map), R2, and the IPC hop.
  */
 import { createRequire } from 'module';
+import crypto from 'node:crypto';
 import fs from 'fs';
-import fsp from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createFakeD1 } from './fixtures/fake-d1.mjs';
+import { createFakeR2 } from './fixtures/fake-r2.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
+const SERVER = path.join(ROOT, 'server');
 const FAKE_DB = path.join(HERE, 'fixtures', 'fake-db.mjs');
 const require = createRequire(import.meta.url);
 const esbuild = require(path.join(ROOT, 'node_modules/esbuild'));
-const repo = require(path.join(ROOT, 'electron/sync/repository.cjs'));
 
-const SHARE = path.join(os.tmpdir(), `ess-2machine-${process.pid}`);
 const N = 86400;
 
 let pass = 0;
@@ -48,7 +48,7 @@ const bundle = esbuild.buildSync({
   bundle: true, format: 'esm', write: false, platform: 'neutral',
   mainFields: ['module', 'main'], absWorkingDir: ROOT,
   alias: { '@/lib/db': FAKE_DB, '@': path.join(ROOT, 'src') },
-  define: { __APP_VERSION__: '"1.1.0"' },
+  define: { __APP_VERSION__: '"1.2.0"' },
 }).outputFiles[0].text;
 
 /** A distinct module instance per machine => independent local storage. */
@@ -56,15 +56,89 @@ const bootMachine = (label) =>
   import('data:text/javascript;base64,' +
     Buffer.from(`${bundle}\n//machine:${label}`).toString('base64'));
 
-/** SyncTransport over the real repository module — what the IPC layer wraps. */
-const folderTransport = (root) => ({
-  kind: 'shared-folder',
-  probe: () => repo.probe(root),
-  listRecordIds: () => repo.listRecordIds(root),
-  fetchMeta: (ref) => repo.fetchMeta(root, ref),
-  fetchPayload: async (ref) => new Uint8Array(await repo.fetchPayload(root, ref)),
-  putRecord: (meta, payload) => repo.putRecord(root, meta, payload),
-});
+// ---------------------------------------------------------------- the service
+const worker = (
+  await import(
+    'data:text/javascript;base64,' +
+      Buffer.from(
+        esbuild.buildSync({
+          entryPoints: [path.join(SERVER, 'src/index.ts')],
+          bundle: true, format: 'esm', write: false, platform: 'neutral',
+          absWorkingDir: SERVER,
+        }).outputFiles[0].text,
+      ).toString('base64')
+  )
+).default;
+
+const env = {
+  DB: createFakeD1(fs.readFileSync(path.join(SERVER, 'migrations/0001_init.sql'), 'utf8')),
+  BUCKET: createFakeR2(),
+};
+const BASE = 'https://graphs.example.com';
+const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
+
+async function issueKey(userName, role) {
+  const key = crypto.randomBytes(32).toString('hex');
+  await env.DB.prepare(
+    `INSERT INTO access_keys (id, key_hash, user_name, user_email, role, created_at)
+     VALUES (?,?,?,?,?,?)`,
+  ).bind(crypto.randomUUID(), sha256(key), userName, null, role, new Date().toISOString()).run();
+  return key;
+}
+
+/** SyncTransport over the real Worker — the same five calls electron/sync/
+ *  apiClient.cjs makes, minus only the IPC hop and TLS. */
+function remoteTransport(accessKey) {
+  const call = (method, p, body, headers = {}) =>
+    worker.fetch(
+      new Request(`${BASE}${p}`, {
+        method,
+        headers: { authorization: `Bearer ${accessKey}`, ...headers },
+        body,
+      }),
+      env,
+    );
+
+  const fail = async (res, what) => {
+    let detail = '';
+    try { detail = (await res.json())?.detail ?? ''; } catch { /* not JSON */ }
+    throw new Error(detail || `${what} failed (${res.status})`);
+  };
+
+  return {
+    kind: 'remote',
+    async probe() {
+      const res = await call('GET', '/v1/me');
+      if (!res.ok) return { reachable: false, writable: false, error: `HTTP ${res.status}` };
+      const me = await res.json();
+      return { reachable: true, writable: Boolean(me.writable), role: me.role, userName: me.userName, error: null };
+    },
+    async listRecordIds() {
+      const res = await call('GET', '/v1/graphs/ids');
+      if (!res.ok) await fail(res, 'Listing');
+      return (await res.json()).records ?? [];
+    },
+    async fetchMeta(ref) {
+      const res = await call('GET', `/v1/graphs/${ref.id}`);
+      if (!res.ok) await fail(res, 'Reading metadata');
+      return res.json();
+    },
+    async fetchPayload(ref) {
+      const res = await call('GET', `/v1/graphs/${ref.id}/payload`);
+      if (!res.ok) await fail(res, 'Downloading payload');
+      return new Uint8Array(await res.arrayBuffer());
+    },
+    async putRecord(meta, payload) {
+      const form = new FormData();
+      form.set('meta', JSON.stringify(meta));
+      form.set('payload', new Blob([payload]), `${meta.id}.essg.gz`);
+      const res = await call('POST', '/v1/graphs', form);
+      if (!res.ok) await fail(res, 'Publishing');
+      const body = await res.json();
+      return { status: body.status, id: body.id };
+    },
+  };
+}
 
 // ---------------------------------------------------------------- test data
 let seed = 4242;
@@ -120,13 +194,10 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
 
 // ---------------------------------------------------------------- run
 (async () => {
-  await fsp.rm(SHARE, { recursive: true, force: true }).catch(() => {});
-  await fsp.mkdir(SHARE, { recursive: true });
-
   const A = await bootMachine('userA');
   const B = await bootMachine('userB');
-  const tA = folderTransport(SHARE);
-  const tB = folderTransport(SHARE);
+  const tA = remoteTransport(await issueKey('User A', 'engineer'));
+  const tB = remoteTransport(await issueKey('User B', 'engineer'));
 
   console.log('\n=== 1. Both machines start empty and independent ===');
   check('User A local history empty', (await A.listGraphHistory()).length === 0);
@@ -147,17 +218,23 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
     `${(recA.payload.byteLength / 1024 / 1024).toFixed(2)} MB`);
   check('pending publish before sync', (await A.listPendingUploads()).length === 1);
 
-  console.log('\n=== 3. A syncs -> graph lands on the shared folder ===');
+  console.log('\n=== 3. A syncs -> graph reaches the service ===');
   let r = await A.runSync(tA);
   check('published', r.uploaded === 1, `uploaded=${r.uploaded}`);
   check('no longer pending on A', (await A.listPendingUploads()).length === 0);
-  const dir = path.join(SHARE, 'v1', 'SNTL600', '2026');
-  const onShare = fs.readdirSync(dir);
-  check('meta file on share', onShare.some((f) => f.startsWith('2026-06-27') && f.endsWith('__meta.json')));
-  check('data file on share', onShare.some((f) => f.startsWith('2026-06-27') && f.endsWith('__data.essg.gz')));
-  check('no .tmp debris', onShare.filter((f) => f.endsWith('.tmp')).length === 0);
-  check('raw spreadsheets NOT on the share',
-    !onShare.some((f) => /\.xlsx?$/i.test(f)) && onShare.length === 2, onShare.join(', '));
+
+  const stored = await env.DB.prepare(
+    'SELECT id, project, data_date, payload_bytes, payload_sha256 FROM graphs',
+  ).all();
+  check('one record in the database', stored.results.length === 1);
+  check('indexed by project and date',
+    stored.results[0].project === 'SNTL600' && stored.results[0].data_date === '2026-06-27');
+  check('one object in storage', env.BUCKET._size() === 1);
+  check('object key is project/date scoped',
+    env.BUCKET._keys()[0] === 'graphs/SNTL600/2026-06-27/' + recA.meta.id + '.essg.gz',
+    env.BUCKET._keys()[0]);
+  check('raw spreadsheets NOT uploaded',
+    !env.BUCKET._keys().some((k) => /\.xlsx?$/i.test(k)));
 
   console.log("\n=== 4. User B syncs -> the graph appears on B's computer ===");
   check("B's history empty before syncing", (await B.listGraphHistory()).length === 0);
@@ -166,7 +243,7 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
   const bList = await B.listGraphHistory();
   check("appears in B's list", bList.length === 1);
   check('same data date', bList[0].dataDate === '2026-06-27');
-  check('attributed to User A', bList[0].engineerName === 'User A');
+  check('attributed to User A by the SERVER, not the client', bList[0].engineerName === 'User A');
   check("stored on B's own computer too", (await B.loadGraphRecord(recA.meta.id)) !== null);
 
   console.log('\n=== 5. B opens it — identical to what A saw ===');
@@ -182,7 +259,7 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
     bRec.meta.view.activeMetric === 'pf_p1' && bRec.meta.view.selectedPlant === 'plant1');
   check('cycle numbers preserved', bEval.dailyCycle.plant1 === 1.234 && bEval.totalCycle.plant2 === 409.9);
   check('SOC markers preserved', bEval.socStats.plant1.maxSoc === 51.7);
-  check('app version stamped', bRec.meta.provenance.appVersion === '1.1.0');
+  check('app version stamped', bRec.meta.provenance.appVersion === '1.2.0');
   check('timestamps rebuilt for the 27th',
     bEval.timestamps.length === N && bEval.timestamps[0].getDate() === 27 && bEval.timestamps[0].getHours() === 0);
 
@@ -227,9 +304,45 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
     finalA.find((e) => e.dataDate === '2026-06-27').engineerName === 'User A' &&
     finalA.find((e) => e.dataDate === '2026-06-28').engineerName === 'User B');
 
+  console.log('\n=== 8. Top Management: receives everything, publishes nothing ===');
+  const M = await bootMachine('manager');
+  const tM = remoteTransport(await issueKey('Top Manager', 'viewer'));
+
+  const mStatus = await tM.probe();
+  check('manager reaches the service', mStatus.reachable === true);
+  check('manager is NOT writable (drives the read-only UI)', mStatus.writable === false);
+
+  // A graph generated locally by a viewer must never reach the service, even if
+  // one somehow exists on their machine.
+  const evM = makeEvalData('2026-06-29');
+  const recM = await M.buildGraphRecord({
+    evalData: evM, project: 'SNTL600', activeMetric: 'pf_p1', selectedPlant: 'plant1',
+    showNccPCommand: false, graphConfig: GRAPH_CONFIG, pinnedPoints: [],
+    engineerName: 'Top Manager', machineName: 'MGMT-PC',
+  });
+  await M.saveGraphRecord(recM, 'sig-29');
+
+  r = await M.runSync(tM);
+  check('manager received both engineers\' graphs', r.downloaded === 2, `downloaded=${r.downloaded}`);
+  check('manager published nothing', r.uploaded === 0);
+  check('no failures shown to the manager', r.failures.length === 0, JSON.stringify(r.failures));
+  check("manager's own graph stays local and pending",
+    (await M.listPendingUploads()).length === 1);
+
+  const idsAfter = (await tM.listRecordIds()).map((x) => x.id).sort();
+  check('service still holds only the engineers\' graphs', idsAfter.length === 2, String(idsAfter.length));
+  check("manager's graph never reached the service", !idsAfter.includes(recM.meta.id));
+
+  // And the refusal is the server's, not merely the client declining to try.
+  let refused = false;
+  try { await tM.putRecord(recM.meta, recM.payload); } catch (err) { refused = /read-only/i.test(err.message); }
+  check('a direct publish attempt is refused by the SERVER', refused);
+
+  check('manager can open an engineer graph',
+    (await M.loadGraphRecord(recA.meta.id)) !== null);
+
   console.log(`\n  compared ${compared.toLocaleString()} plotted values · max error ${maxErr.toExponential(2)}`);
 
-  await fsp.rm(SHARE, { recursive: true, force: true }).catch(() => {});
 
   console.log(`\ntwo-machine: ${pass} passed, ${failures.length} failed`);
   failures.forEach((f) => console.log('   - ' + f));

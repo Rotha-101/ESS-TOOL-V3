@@ -2,7 +2,7 @@
  *
  * The index is mutated from two independent places — auto-save when an
  * engineer generates a graph, and the sync loop when it imports records from
- * the shared folder. Both do read-modify-write against one IndexedDB key, so
+ * the service. Both do read-modify-write against one IndexedDB key, so
  * concurrency here is the difference between a graph appearing in the list and
  * silently vanishing from it. */
 

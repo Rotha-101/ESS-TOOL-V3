@@ -1,7 +1,7 @@
 // Sync status for the Graph Repository header.
 //
 // States are worded so a user knows whether to act: "offline" explicitly says
-// local history still works, because the app being usable without the share is
+// local history still works, because the app being usable without the server is
 // the point, not a degraded mode to apologise for.
 
 import React from 'react';
@@ -42,10 +42,10 @@ function badgeFor(state: SyncState, configured: boolean) {
 }
 
 export function SyncStatusBar({ state, onSync }: { state: SyncState; onSync: () => void }) {
-  const sharedFolderPath = useAppStore((s) => s.sharedFolderPath);
+  const serverUrl = useAppStore((s) => s.serverUrl);
   const setIsSettingsOpen = useAppStore((s) => s.setIsSettingsOpen);
 
-  const configured = Boolean(sharedFolderPath);
+  const configured = Boolean(serverUrl);
   const badge = badgeFor(state, configured);
   const busy = state.phase === 'syncing';
 
@@ -63,7 +63,7 @@ export function SyncStatusBar({ state, onSync }: { state: SyncState; onSync: () 
               ? 'text-emerald-400 border-emerald-500/25 bg-emerald-500/5'
               : 'text-blue-400 border-blue-500/25 bg-blue-500/5',
           )}
-          title={state.writable ? 'You can publish graphs to the shared repository' : 'Read-only access to the shared repository'}
+          title={state.writable ? 'You can publish graphs to the company repository' : 'Read-only access to the company repository'}
         >
           {state.writable ? <><Pencil size={9} /> Can publish</> : <><Eye size={9} /> View only</>}
         </span>

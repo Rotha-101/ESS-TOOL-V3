@@ -144,13 +144,13 @@ interface AppState {
   graphHistoryVersion: number;
   bumpGraphHistoryVersion: () => void;
 
-  // Shared graph repository (Windows shared folder). Configurable rather than
-  // hardcoded so IT can move the share without a rebuild.
-  sharedFolderPath: string;
-  setSharedFolderPath: (path: string) => void;
+  // Shared graph repository service. Configurable rather than
+  // hardcoded so the service can move without a rebuild.
+  serverUrl: string;
+  setServerUrl: (path: string) => void;
 
-  sharedFolderSyncEnabled: boolean;
-  setSharedFolderSyncEnabled: (val: boolean) => void;
+  syncEnabled: boolean;
+  setSyncEnabled: (val: boolean) => void;
 
   syncState: SyncState;
   setSyncState: (state: Partial<SyncState>) => void;
@@ -297,11 +297,11 @@ export const useAppStore = create<AppState>()(
       graphHistoryVersion: 0,
       bumpGraphHistoryVersion: () => set((state) => ({ graphHistoryVersion: state.graphHistoryVersion + 1 })),
 
-      sharedFolderPath: '',
-      setSharedFolderPath: (path) => set({ sharedFolderPath: path }),
+      serverUrl: '',
+      setServerUrl: (path) => set({ serverUrl: path }),
 
-      sharedFolderSyncEnabled: true,
-      setSharedFolderSyncEnabled: (val) => set({ sharedFolderSyncEnabled: val }),
+      syncEnabled: true,
+      setSyncEnabled: (val) => set({ syncEnabled: val }),
 
       syncState: INITIAL_SYNC_STATE,
       setSyncState: (patch) => set((state) => ({ syncState: { ...state.syncState, ...patch } })),
@@ -351,8 +351,8 @@ export const useAppStore = create<AppState>()(
         aiEnableWebSearch: state.aiEnableWebSearch,
         engineerName: state.engineerName,
         graphHistoryEnabled: state.graphHistoryEnabled,
-        sharedFolderPath: state.sharedFolderPath,
-        sharedFolderSyncEnabled: state.sharedFolderSyncEnabled,
+        serverUrl: state.serverUrl,
+        syncEnabled: state.syncEnabled,
         lastKnownWritable: state.lastKnownWritable
       }),
     }

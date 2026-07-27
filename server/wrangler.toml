@@ -1,0 +1,18 @@
+name = "ess-graph-repository"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# Metadata. D1 is SQLite, which is what keeps this off PostgreSQL.
+[[d1_databases]]
+binding = "DB"
+database_name = "ess-graph-repository"
+database_id = "REPLACE_WITH_YOUR_D1_ID"   # wrangler d1 create ess-graph-repository
+
+# Payloads. R2 charges no egress, which matters because every client
+# repeatedly downloads graph data.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ess-graph-payloads"        # wrangler r2 bucket create ess-graph-payloads
+
+[observability]
+enabled = true

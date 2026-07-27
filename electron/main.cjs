@@ -3,7 +3,8 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { exportMatlabFigures } = require('./matlabExport.cjs');
-const repository = require('./sync/repository.cjs');
+const api = require('./sync/apiClient.cjs');
+const credentials = require('./sync/credentials.cjs');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -105,17 +106,20 @@ ipcMain.handle('save-matlab-figures', async (event, payload) => {
 // ---------------------------------------------------------------------------
 // Shared graph repository (see docs/GRAPH_REPOSITORY.md)
 //
-// All filesystem access to the SMB share happens here in the main process; the
-// renderer only ever sees plain data. Every handler resolves rather than
-// throws, because a shared folder being unreachable is an ordinary condition
-// (laptop off the network) that the UI reports, not an exception.
+// All network access to the service happens here in the main process, for the
+// same reason filesystem access used to: this is where the access key lives,
+// and it must never reach the renderer. The renderer sees plain data only.
+//
+// Every handler resolves rather than throws, because an unreachable service is
+// an ordinary condition (no internet) the UI reports, not an exception.
 // ---------------------------------------------------------------------------
 
 const ok = (data) => ({ ok: true, ...data });
 const fail = (err) => ({ ok: false, error: err && err.message ? err.message : String(err) });
 
-/** Windows identity for attribution. AD authenticates the write itself; this is
- *  what the record displays. */
+/** Machine name for record provenance. The engineer's NAME is not taken from
+ *  here — the server overwrites it from the access key, so attribution cannot
+ *  be spoofed by editing local settings. */
 ipcMain.handle('sync:identity', async () => {
   try {
     return ok({ userName: os.userInfo().username, machineName: os.hostname() });
@@ -124,53 +128,69 @@ ipcMain.handle('sync:identity', async () => {
   }
 });
 
-ipcMain.handle('sync:probe', async (event, root) => {
+ipcMain.handle('sync:probe', async (event, baseUrl) => {
   try {
-    return ok(await repository.probe(root));
+    return ok(await api.probe(baseUrl));
   } catch (err) {
     return fail(err);
   }
 });
 
-ipcMain.handle('sync:list', async (event, root) => {
+ipcMain.handle('sync:list', async (event, baseUrl) => {
   try {
-    return ok({ refs: await repository.listRecordIds(root) });
+    return ok({ refs: await api.listRecordIds(baseUrl) });
   } catch (err) {
     return fail(err);
   }
 });
 
-ipcMain.handle('sync:fetch-meta', async (event, root, ref) => {
+ipcMain.handle('sync:fetch-meta', async (event, baseUrl, ref) => {
   try {
-    return ok({ meta: await repository.fetchMeta(root, ref) });
+    return ok({ meta: await api.fetchMeta(baseUrl, ref) });
   } catch (err) {
     return fail(err);
   }
 });
 
-ipcMain.handle('sync:fetch-payload', async (event, root, ref) => {
+ipcMain.handle('sync:fetch-payload', async (event, baseUrl, ref) => {
   try {
-    const buffer = await repository.fetchPayload(root, ref);
-    // Buffer survives structured clone as a Uint8Array view in the renderer.
-    return ok({ payload: new Uint8Array(buffer) });
+    // Uint8Array survives structured clone into the renderer.
+    return ok({ payload: await api.fetchPayload(baseUrl, ref) });
   } catch (err) {
     return fail(err);
   }
 });
 
-ipcMain.handle('sync:put', async (event, root, meta, payload) => {
+ipcMain.handle('sync:put', async (event, baseUrl, meta, payload) => {
   try {
-    return ok(await repository.putRecord(root, meta, payload));
+    return ok(await api.putRecord(baseUrl, meta, payload));
   } catch (err) {
     return fail(err);
   }
 });
 
-/** Folder picker for the Settings field, so nobody has to type a UNC path. */
-ipcMain.handle('sync:choose-folder', async () => {
-  const result = await dialog.showOpenDialog({
-    title: 'Select the shared graph repository folder',
-    properties: ['openDirectory'],
-  });
-  return result.canceled ? null : result.filePaths[0];
+// --- Access key. The renderer may set, clear and ask whether one exists, but
+// --- there is deliberately no handler that returns the key itself.
+ipcMain.handle('sync:has-key', async () => {
+  try {
+    return ok({ hasKey: credentials.hasKey() });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+ipcMain.handle('sync:set-key', async (event, key) => {
+  try {
+    return ok(credentials.setKey(key));
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+ipcMain.handle('sync:clear-key', async () => {
+  try {
+    return ok(credentials.clearKey());
+  } catch (err) {
+    return fail(err);
+  }
 });

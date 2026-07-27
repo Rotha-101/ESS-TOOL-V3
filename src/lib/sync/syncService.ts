@@ -10,7 +10,7 @@
 //     second queue that could drift out of step with the history.
 //
 // The cursor is the set of ids already held locally, never a timestamp, so
-// clock differences between workstations and the file server are irrelevant.
+// clock differences between workstations and the server are irrelevant.
 
 import {
   importRemoteRecord,
@@ -70,7 +70,7 @@ export async function runSync(
 
   // ---- Pull -------------------------------------------------------------
   try {
-    onProgress?.('Checking shared folder…');
+    onProgress?.('Checking for new graphs…');
     const refs = await transport.listRecordIds();
     const known = await listKnownIds();
     const missing = refs.filter((ref) => !known.has(ref.id)).slice(0, maxDownloads);
@@ -88,11 +88,11 @@ export async function runSync(
       await yieldToUi();
     }
   } catch (err: any) {
-    failures.push(`Could not read the shared folder: ${err?.message ?? String(err)}`);
+    failures.push(`Could not read the repository: ${err?.message ?? String(err)}`);
   }
 
   // ---- Push -------------------------------------------------------------
-  // Read-only users (Management) skip this entirely; the share denies the write
+  // Read-only users (Management) skip this entirely; the server refuses the write
   // anyway, and attempting it would only produce noise in the status bar.
   if (status.writable) {
     try {
@@ -126,33 +126,34 @@ export async function runSync(
 
 /** Fetch one record and verify it before it enters local history.
  *
- * There is no server validating writes, so this is the only gate between a
- * file on a shared folder and the graph history the whole company trusts.
- * Everything it checks is cheap and every failure is per-record. */
+ * The service validates on upload, so this is defence in depth rather than the
+ * only gate — but it is what catches a truncated or interrupted download, which
+ * no amount of server-side checking can prevent. Every check is cheap and every
+ * failure is per-record. */
 async function downloadRecord(transport: SyncTransport, ref: RecordRef): Promise<void> {
   const meta = await transport.fetchMeta(ref);
 
-  // Structural check before the checksum. A file that parses as JSON but is not
-  // a graph record would otherwise sail past the checksum test below simply by
-  // not declaring one, and only fail much later when someone opens it.
+  // Structural check before the checksum. A response that parses as JSON but is
+  // not a graph record would otherwise sail past the checksum test below simply
+  // by not declaring one, and only fail much later when someone opened it.
   if (!meta?.id || !meta.project || !meta.dataDate || !meta.payload?.sha256) {
     throw new Error('not a valid graph record (missing id, project, date or checksum)');
   }
 
   // The id is also the sync cursor. If the metadata claimed a different id from
-  // the one in the filename, the record would be stored under the claimed id
-  // while the cursor still looked for the filename's — and it would be
+  // the one it was listed under, the record would be stored under the claimed
+  // id while the cursor still looked for the listed one — and it would be
   // re-downloaded on every pass, forever.
   if (meta.id !== ref.id) {
-    throw new Error(`id mismatch: file says "${ref.id}", contents say "${meta.id}"`);
+    throw new Error(`id mismatch: listed as "${ref.id}", contents say "${meta.id}"`);
   }
 
   const payload = await transport.fetchPayload(ref);
 
-  // Catches a truncated SMB read before a corrupt graph is stored and then
+  // Catches a truncated transfer before a corrupt graph is stored and then
   // presented as genuine.
   if ((await sha256Hex(payload)) !== meta.payload.sha256) {
-    throw new Error('checksum mismatch — the file may be incomplete or damaged');
+    throw new Error('checksum mismatch — the download may be incomplete or damaged');
   }
 
   await importRemoteRecord({ meta, payload });
