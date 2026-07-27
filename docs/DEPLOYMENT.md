@@ -2,6 +2,10 @@
 
 Shared Graph Repository — setup, rollout and troubleshooting.
 
+**Applies to version 1.1.0 and later.** The Graph Repository was introduced in
+1.1.0; earlier builds (1.0.x) have no shared-folder support and ignore these
+settings entirely. Installer: `Data Visualization Tool Setup 1.1.0.exe`.
+
 Audience: whoever administers the file server and distributes the `.exe`.
 There is no server to install, no database to configure and no accounts to
 create. Setup is a folder and two permission groups.
@@ -94,7 +98,7 @@ Repository → Test Connection**. It reports exactly one of:
 
 Same installer, same `.exe`, for everyone.
 
-1. Install the application.
+1. Install the application (`Data Visualization Tool Setup 1.1.0.exe` or later).
 2. Open **Settings → Shared Graph Repository**.
 3. Enter the UNC path (or use **Browse**). Always use the UNC form
    `\\fileserver\ESS\GraphRepository`, never a mapped drive letter — drive
@@ -184,7 +188,9 @@ write; the UI gating is convenience, and the filesystem is the enforcement.
 Clients tolerate records disappearing. Given the size, there is rarely a reason.
 
 **Upgrading the application** — decoders read every codec version ever shipped,
-so mixed versions across the fleet are safe. Upgrade at your own pace.
+so mixed versions across the fleet are safe. Upgrade at your own pace. Machines
+still on 1.0.x simply have no Graph Repository; they neither publish nor
+receive, and nothing on the share is affected by them.
 
 **Moving the share** — copy the folder, then update the path in each client's
 Settings. Because records are immutable, a copy is always consistent.
