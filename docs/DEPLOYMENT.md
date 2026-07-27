@@ -32,31 +32,48 @@ itself accordingly.
 
 Create two AD groups and apply them to the share:
 
-| Group | Share + NTFS rights | Result in the app |
-|---|---|---|
-| `ESS-Engineers` | Read, Write, **Create files/folders** — *Delete denied* | Generate, publish, view all, export |
-| `ESS-Management` | **Read only** | View all, search, open, export. No import, no publish, no delete |
+| Group | Share rights | NTFS rights | Result in the app |
+|---|---|---|---|
+| `ESS-Engineers` | Change | **Modify** | Generate, publish, view all, export |
+| `ESS-Management` | Read | **Read & execute** | View all, search, open, export. No import, no publish, no delete |
+| `ESS-Admins` | Full Control | Full control | Above, plus pruning and archiving |
 
-Optionally `ESS-Admins` with Full Control for pruning or archiving old records.
+### Do NOT deny Delete to engineers
 
-### Why deny Delete for engineers
+An earlier draft of this guide recommended denying the NTFS *Delete* right to
+make the share append-only. **That breaks publishing** and must not be applied.
 
-Records are immutable and append-only by design. Denying the NTFS *Delete*
-right enforces that at the filesystem level, which is stronger than any check
-the application could make — a modified client still cannot delete anything.
+Publishing writes a `.tmp` file and renames it into place so readers never see
+a half-written record. On Windows, renaming a file requires the DELETE right on
+the source, and an explicit Deny overrides every Allow — so a Deny-Delete share
+accepts the file creation and then fails the rename with `EPERM`, leaving `.tmp`
+debris behind on every attempt.
+
+Append-only is instead guaranteed by the application: **nothing in the app ever
+deletes from the share.** The delete button in the Graph Repository removes only
+that computer's local copy. Combined with normal file-server backups, that is
+sufficient, and engineers are trusted internal users.
+
+The app detects this misconfiguration if it is applied anyway — `probe()`
+exercises create, rename and delete, so such a share reports *Read only* rather
+than claiming write access it does not have.
 
 ### Applying it
 
-```
-Right-click the folder → Properties → Security → Advanced
-  - Disable inheritance, convert to explicit permissions
-  - Remove broad grants such as Users / Everyone
-  - ESS-Management  → Allow: Read & execute, List folder contents, Read
-  - ESS-Engineers   → Allow: Modify
-                      Advanced → Deny: Delete, Delete subfolders and files
-  - ESS-Admins      → Allow: Full control
-Sharing tab → Advanced Sharing → Permissions
-  - ESS-Engineers: Change    ESS-Management: Read    ESS-Admins: Full Control
+```powershell
+# Run on the file server as administrator. Replace DOMAIN.
+$P = 'D:\ESS\GraphRepository'
+
+icacls $P /inheritance:d
+icacls $P /remove:g "BUILTIN\Users" "Everyone" "NT AUTHORITY\Authenticated Users"
+icacls $P /grant "DOMAIN\ESS-Admins:(OI)(CI)(F)"
+icacls $P /grant "DOMAIN\ESS-Engineers:(OI)(CI)(M)"
+icacls $P /grant "DOMAIN\ESS-Management:(OI)(CI)(RX)"
+
+New-SmbShare -Name 'GraphRepository' -Path $P `
+  -FullAccess   'DOMAIN\ESS-Admins' `
+  -ChangeAccess 'DOMAIN\ESS-Engineers' `
+  -ReadAccess   'DOMAIN\ESS-Management'
 ```
 
 Share and NTFS permissions combine as the **most restrictive** of the two, so

@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const fsp = require('fs/promises');
+const os = require('os');
 const path = require('path');
 
 const SCHEMA_VERSION = 1;
@@ -96,15 +97,32 @@ async function probe(root) {
     };
   }
 
+  // Exercise the exact primitives putRecord needs — create, rename, delete —
+  // not just "can I create a file".
+  //
+  // Publishing writes a .tmp and renames it into place, and on Windows a
+  // rename requires the DELETE right on the source. A share that grants create
+  // but denies delete therefore accepts the probe file while failing every
+  // real publish with EPERM, which previously reported the user as an engineer
+  // and then failed silently forever.
+  //
+  // The probe name is stable per machine rather than unique per call: if
+  // cleanup cannot run, that leaves one stale file to notice, not one per
+  // probe accumulating every few minutes.
   let writable = false;
-  const probeFile = path.join(root, `.write-probe-${process.pid}-${Date.now()}`);
+  const probeBase = path.join(root, `.write-probe-${os.hostname()}`);
+  const probeTmp = `${probeBase}.tmp`;
   try {
-    await fsp.writeFile(probeFile, '');
+    await fsp.writeFile(probeTmp, '');
+    await fsp.rename(probeTmp, probeBase);
+    await fsp.unlink(probeBase);
     writable = true;
   } catch {
     writable = false;
   } finally {
-    try { await fsp.unlink(probeFile); } catch { /* never existed */ }
+    for (const leftover of [probeTmp, probeBase]) {
+      try { await fsp.unlink(leftover); } catch { /* absent, or undeletable */ }
+    }
   }
 
   // Read the marker, creating it on first use if we are allowed to.

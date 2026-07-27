@@ -149,6 +149,30 @@ const makeMeta = (project, dataDate, id, engineer = 'CHEA Rotha') => ({
     try { await fsp.rm(roShare, { recursive: true, force: true }); } catch {}
   }
 
+  console.log('\n=== 13. Deny-Delete share must NOT report writable ===');
+  // Publishing renames a .tmp into place, and on Windows rename needs DELETE
+  // on the source. A share granting create but denying delete accepts a plain
+  // write while failing every real publish with EPERM — so the probe must
+  // exercise create+rename+delete, or it reports an engineer who cannot
+  // actually publish anything.
+  const ddShare = path.join(os.tmpdir(), `ess-dd-${Date.now()}`);
+  await fsp.mkdir(ddShare, { recursive: true });
+  await fsp.writeFile(path.join(ddShare, 'repository.json'),
+    JSON.stringify({ kind: 'ess-graph-repository', schemaVersion: 1, createdAt: new Date().toISOString() }));
+  const me = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`;
+  try {
+    execSync(`icacls "${ddShare}" /deny "${me}:(OI)(CI)(DE,DC)"`, { stdio: 'pipe' });
+    const ddProbe = await repo.probe(ddShare);
+    check('deny-delete share: reachable', ddProbe.reachable === true);
+    check('deny-delete share: writable=false (publish would fail)', ddProbe.writable === false,
+      `writable=${ddProbe.writable}`);
+  } catch (err) {
+    console.log('  SKIP  icacls unavailable in this environment');
+  } finally {
+    try { execSync(`icacls "${ddShare}" /remove:d "${me}"`, { stdio: 'pipe' }); } catch {}
+    try { await fsp.rm(ddShare, { recursive: true, force: true }); } catch {}
+  }
+
   // cleanup
   for (const dirToRemove of [SHARE, foreign]) {
     try { await fsp.rm(dirToRemove, { recursive: true, force: true }); } catch {}
