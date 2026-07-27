@@ -12,6 +12,32 @@ of the same `.exe` — Engineers and Top Management alike — sees the same list
 Only the **final graph dataset** is stored. Raw imported spreadsheets,
 intermediate parse state, and calculation scratch are never written anywhere.
 
+## Storage model — local first
+
+**The shared folder is not the primary storage.** Each computer's own local
+history is, and the folder is only the hub records travel through.
+
+```text
+1. Engineer A generates a graph          → saved to A's local history immediately
+2. A publishes it                        → copied to the shared folder
+3. B and the Manager sync                → each downloads it
+4. Each saves it into its OWN local history
+5. It appears in their Graph Repository
+```
+
+Consequences that follow from this, and are what make it worth doing:
+
+- Every computer holds a **complete local copy** of all synchronised graphs.
+- A graph is safe on the engineer's machine **before** any network operation.
+- If the shared folder is unavailable, everyone keeps working: generating,
+  browsing history and opening graphs all use local storage only.
+- When it returns, publishing and downloading resume automatically with no
+  user action.
+
+Verified end to end by `scripts/test-two-machine.mjs`, which runs two machines
+with genuinely separate local storage against one real folder and checks that a
+graph plotted on A arrives on B byte-for-byte.
+
 ---
 
 ## Problem this solves
