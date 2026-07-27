@@ -1,7 +1,9 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { exportMatlabFigures } = require('./matlabExport.cjs');
+const repository = require('./sync/repository.cjs');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -97,4 +99,78 @@ ipcMain.handle('select-zip-file', async (event, defaultName) => {
 // IPC Handler: save-matlab-figures
 ipcMain.handle('save-matlab-figures', async (event, payload) => {
   return exportMatlabFigures(payload);
+});
+
+
+// ---------------------------------------------------------------------------
+// Shared graph repository (see docs/GRAPH_REPOSITORY.md)
+//
+// All filesystem access to the SMB share happens here in the main process; the
+// renderer only ever sees plain data. Every handler resolves rather than
+// throws, because a shared folder being unreachable is an ordinary condition
+// (laptop off the network) that the UI reports, not an exception.
+// ---------------------------------------------------------------------------
+
+const ok = (data) => ({ ok: true, ...data });
+const fail = (err) => ({ ok: false, error: err && err.message ? err.message : String(err) });
+
+/** Windows identity for attribution. AD authenticates the write itself; this is
+ *  what the record displays. */
+ipcMain.handle('sync:identity', async () => {
+  try {
+    return ok({ userName: os.userInfo().username, machineName: os.hostname() });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+ipcMain.handle('sync:probe', async (event, root) => {
+  try {
+    return ok(await repository.probe(root));
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+ipcMain.handle('sync:list', async (event, root) => {
+  try {
+    return ok({ refs: await repository.listRecordIds(root) });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+ipcMain.handle('sync:fetch-meta', async (event, root, ref) => {
+  try {
+    return ok({ meta: await repository.fetchMeta(root, ref) });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+ipcMain.handle('sync:fetch-payload', async (event, root, ref) => {
+  try {
+    const buffer = await repository.fetchPayload(root, ref);
+    // Buffer survives structured clone as a Uint8Array view in the renderer.
+    return ok({ payload: new Uint8Array(buffer) });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+ipcMain.handle('sync:put', async (event, root, meta, payload) => {
+  try {
+    return ok(await repository.putRecord(root, meta, payload));
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+/** Folder picker for the Settings field, so nobody has to type a UNC path. */
+ipcMain.handle('sync:choose-folder', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select the shared graph repository folder',
+    properties: ['openDirectory'],
+  });
+  return result.canceled ? null : result.filePaths[0];
 });

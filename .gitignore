@@ -27,7 +27,12 @@ Test/
 Data/
 
 Release/
+# Root-level scratch/patch scripts are .cjs; the Electron main process is too,
+# and package.json sets "type": "module" so it CANNOT use .js. Keep the app's
+# own sources tracked, or new main-process modules vanish from git silently.
 *.cjs
+!electron/**/*.cjs
+!scripts/**/*.cjs
 
 # Scratch/debug artifacts
 diff.txt

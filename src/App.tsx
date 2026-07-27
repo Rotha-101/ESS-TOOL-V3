@@ -8,12 +8,16 @@ import {
   BarChart3,
   Battery,
   Bot,
+  Database,
   Download,
+  Eye,
   FileText,
   FileCode,
   FileSpreadsheet,
+  Gauge,
   Grid2X2,
   Moon,
+  Send,
   Settings,
   Sun,
   Upload,
@@ -58,6 +62,10 @@ import { KpiCard } from './components/KpiCard';
 import { ValidationDebug } from './components/ValidationDebug';
 import { CycleCalculation } from './components/CycleCalculation';
 import { DailyEvaluationGraph } from './features/daily-evaluation';
+import { GraphRepository, useBackgroundSync, useIsReadOnly } from './features/graph-repository';
+import { UsableCapacity } from './features/usable-capacity';
+import { TelegramNcc } from './features/telegram-ncc';
+import { DatabaseTab } from './features/database';
 import { SettingsWindow } from './components/SettingsWindow';
 import { GlobalProgressModal } from './components/GlobalProgressModal';
 
@@ -84,6 +92,20 @@ export default function App() {
 
   const project = getHcActiveProject() || 'SNTL1000';
   const { messages } = useAIContext();
+
+  // Sole owner of the shared-folder sync loop. Mounted here rather than in the
+  // Graph Repository tab so history keeps syncing whatever the user is doing.
+  useBackgroundSync();
+
+  // Read-only means the shared folder refused a write — Top Management. Every
+  // other module in this app exists to import, generate or transform imported
+  // data, none of which they can do, so the repository is the whole product for
+  // them. Same .exe, same components; only the nav is filtered.
+  const readOnly = useIsReadOnly();
+
+  useEffect(() => {
+    if (readOnly && activeTab !== 'graph_repository') setActiveTab('graph_repository');
+  }, [readOnly, activeTab, setActiveTab]);
 
   const [alertData, setAlertData] = useState<{ title: string, message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isExportingMat, setIsExportingMat] = useState(false);
@@ -579,6 +601,14 @@ export default function App() {
               </SelectContent>
             </Select>
           </div>
+          {readOnly && (
+            <span
+              className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded bg-blue-500/15 text-blue-300 border border-blue-400/30"
+              title="The shared graph folder grants your Windows account read access only. Viewing and exporting are available; importing and publishing are not."
+            >
+              <Eye size={11} /> VIEW ONLY
+            </span>
+          )}
           <div className="flex items-center gap-2 text-[11px] text-white">
             <span className="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
             <HeaderClock />
@@ -602,12 +632,20 @@ export default function App() {
           <div>
             <div className="p-3 text-[10px] uppercase tracking-widest text-foreground/30 font-bold">Main Modules</div>
             <div className="flex flex-col">
-              <NavItem icon={<Grid2X2 size={14} />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => switchTab('dashboard')} />
-              <NavItem icon={<Activity size={14} />} label="Validation File Debug" active={activeTab === 'signal'} onClick={() => switchTab('signal')} />
-              <NavItem icon={<Zap size={14} />} label="Cycle Calculation" active={activeTab === 'power'} onClick={() => switchTab('power')} />
-              <NavItem icon={<Battery size={14} />} label="Daily Evaluation Graph" active={activeTab === 'soc'} onClick={() => switchTab('soc')} />
-              <NavItem icon={<Download size={14} />} label="Report Export" active={activeTab === 'export'} onClick={() => switchTab('export')} />
-              <NavItem icon={<Bot size={14} />} label="AI Agent" active={activeTab === 'ai'} onClick={() => switchTab('ai')} />
+              <NavItem icon={<Archive size={14} />} label="Graph Repository" active={activeTab === 'graph_repository'} onClick={() => switchTab('graph_repository')} />
+              {!readOnly && (
+                <>
+                  <NavItem icon={<Grid2X2 size={14} />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => switchTab('dashboard')} />
+                  <NavItem icon={<Activity size={14} />} label="Validation File Debug" active={activeTab === 'signal'} onClick={() => switchTab('signal')} />
+                  <NavItem icon={<Zap size={14} />} label="Cycle Calculation" active={activeTab === 'power'} onClick={() => switchTab('power')} />
+                  <NavItem icon={<Battery size={14} />} label="Daily Evaluation Graph" active={activeTab === 'soc'} onClick={() => switchTab('soc')} />
+                  <NavItem icon={<Download size={14} />} label="Report Export" active={activeTab === 'export'} onClick={() => switchTab('export')} />
+                  <NavItem icon={<Gauge size={14} />} label="Usable Capacity" active={activeTab === 'usable_capacity'} onClick={() => switchTab('usable_capacity')} />
+                  <NavItem icon={<Send size={14} />} label="Telegram NCC Data" active={activeTab === 'telegram_ncc'} onClick={() => switchTab('telegram_ncc')} />
+                  <NavItem icon={<Bot size={14} />} label="AI Agent" active={activeTab === 'ai'} onClick={() => switchTab('ai')} />
+                  <NavItem icon={<Database size={14} />} label="Database" active={activeTab === 'database'} onClick={() => switchTab('database')} />
+                </>
+              )}
             </div>
           </div>
           <div className="p-2 border-t border-border-v">
@@ -633,7 +671,7 @@ export default function App() {
           ) : (
             <>
               {/* KPI Cards */}
-              {activeTab !== 'smart_report' && activeTab !== 'export' && activeTab !== 'soc' && activeTab !== 'ai' && activeTab !== 'jscript' && (() => {
+              {activeTab !== 'smart_report' && activeTab !== 'export' && activeTab !== 'soc' && activeTab !== 'ai' && activeTab !== 'jscript' && activeTab !== 'usable_capacity' && activeTab !== 'telegram_ncc' && activeTab !== 'database' && (() => {
                 const isBessProject = is20PercentProject(project);
                 return (
                   <section className={`grid ${getProjectPlants(project).length === 2 ? 'grid-cols-5' : (getProjectPlants(project).length === 1 ? 'grid-cols-4' : 'grid-cols-6')} gap-4 shrink-0`}>
@@ -935,6 +973,14 @@ export default function App() {
                   );
                 })()
 
+              ) : activeTab === 'telegram_ncc' ? (
+                <TelegramNcc />
+              ) : activeTab === 'database' ? (
+                <DatabaseTab project={project} />
+              ) : activeTab === 'graph_repository' ? (
+                <GraphRepository project={project} />
+              ) : activeTab === 'usable_capacity' ? (
+                <UsableCapacity project={project} />
               ) : activeTab === 'ai' ? (
                 <AIAgent />
               ) : activeTab === 'smart_report' ? (

@@ -39,6 +39,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit && node scripts/check-export-templates.cjs",
+    "test": "node scripts/test-codec.mjs && node scripts/test-history.mjs && node scripts/test-repository.cjs && node scripts/test-sync.mjs && node scripts/test-access.mjs",
     "electron:dev": "concurrently \"vite\" \"electron .\"",
     "electron:build": "vite build && electron-builder"
   },

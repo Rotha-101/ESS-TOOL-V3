@@ -1,7 +1,10 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { createRequire } from 'module';
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
+
+const pkg = createRequire(import.meta.url)('./package.json');
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -10,6 +13,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      // Stamped onto every saved graph so a record always says which build
+      // produced it. Single source of truth is package.json.
+      __APP_VERSION__: JSON.stringify(pkg.version),
       global: 'window',
     },
     resolve: {

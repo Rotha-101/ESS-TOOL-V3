@@ -25,6 +25,16 @@ export const getDBItem = async <T>(key: string): Promise<T | null> => {
   }
 };
 
+/** Every key currently held in the unified store. Used by the Database tab. */
+export const getDBKeys = async (): Promise<string[]> => {
+  try {
+    return await localforage.keys();
+  } catch (err) {
+    console.error('Error listing localforage keys:', err);
+    return [];
+  }
+};
+
 export const removeDBItem = async (key: string): Promise<void> => {
   try {
     await localforage.removeItem(key);

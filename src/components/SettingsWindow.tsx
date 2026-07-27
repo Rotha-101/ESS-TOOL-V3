@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  Archive,
   Bot,
   CheckCircle2,
   Cpu,
@@ -28,6 +29,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAIContext } from '../lib/ai-context';
 import { useAppStore } from '../store/useAppStore';
+import { SharedFolderSettings } from './SharedFolderSettings';
 
 export function SettingsWindow({ onClose, isMaximized, onToggleMaximize }: { onClose: () => void, isMaximized: boolean, onToggleMaximize: () => void }) {
   const [activeMenu, setActiveMenu] = useState('general');
@@ -35,6 +37,8 @@ export function SettingsWindow({ onClose, isMaximized, onToggleMaximize }: { onC
 
   const {
     theme, setTheme,
+    engineerName, setEngineerName,
+    graphHistoryEnabled, setGraphHistoryEnabled,
     compactTableRows, setCompactTableRows,
     autoRefreshDashboard, setAutoRefreshDashboard,
     refreshInterval, setRefreshInterval,
@@ -88,6 +92,38 @@ export function SettingsWindow({ onClose, isMaximized, onToggleMaximize }: { onC
           <div className="flex-1 p-6 overflow-y-auto">
             {activeMenu === 'general' && (
               <div className="flex flex-col gap-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="space-y-4">
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-foreground/40 mb-2 border-b border-border-v pb-2 flex items-center gap-2">
+                    <Archive size={12} /> Graph Repository
+                  </h3>
+
+                  <div className="flex items-center justify-between bg-surface/50 p-3 rounded border border-border-v">
+                    <div className="flex flex-col">
+                      <span className="text-[12px] font-medium">Engineer Name</span>
+                      <span className="text-[10px] text-foreground/40">Stamped on every graph you generate</span>
+                    </div>
+                    <input
+                      value={engineerName}
+                      onChange={(e) => setEngineerName(e.target.value)}
+                      placeholder="e.g. CHEA Rotha"
+                      className="w-48 h-8 px-2 rounded bg-panel border border-border-v text-[11px] text-foreground/90 placeholder:text-foreground/30 focus:outline-none focus:border-accent-blue"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between bg-surface/50 p-3 rounded border border-border-v">
+                    <div className="flex flex-col">
+                      <span className="text-[12px] font-medium">Auto-Save Generated Graphs</span>
+                      <span className="text-[10px] text-foreground/40">Keeps history instead of overwriting the previous day</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" checked={graphHistoryEnabled} onChange={(e) => setGraphHistoryEnabled(e.target.checked)} />
+                      <div className="w-8 h-4 bg-foreground/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-accent-blue"></div>
+                    </label>
+                  </div>
+                </div>
+
+                <SharedFolderSettings />
+
                 <div className="space-y-4">
                   <h3 className="text-[11px] font-bold uppercase tracking-widest text-foreground/40 mb-2 border-b border-border-v pb-2 flex items-center gap-2">
                     <Grid2X2 size={12} /> Display Preferences

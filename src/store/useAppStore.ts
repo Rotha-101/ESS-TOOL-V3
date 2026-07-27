@@ -2,6 +2,31 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { WorkbookPreviewSource } from '../components/WorkbookPreview';
 import type { EvalData } from '../types/eval-data';
+import type { EmsRecord, FilterState } from '../features/telegram-ncc/types';
+import { INITIAL_FILTERS } from '../features/telegram-ncc/constants';
+
+/** Live sync status. Session-only — it describes right now, not a preference. */
+export interface SyncState {
+  /** idle before the first pass has run. */
+  phase: 'idle' | 'syncing' | 'ok' | 'offline' | 'error';
+  message: string;
+  /** False for Management (read-only share permissions). */
+  writable: boolean;
+  lastSyncAt: string | null;
+  downloaded: number;
+  uploaded: number;
+  pending: number;
+}
+
+export const INITIAL_SYNC_STATE: SyncState = {
+  phase: 'idle',
+  message: '',
+  writable: false,
+  lastSyncAt: null,
+  downloaded: 0,
+  uploaded: 0,
+  pending: 0,
+};
 
 interface AppState {
   activeTab: string;
@@ -104,6 +129,52 @@ interface AppState {
 
   hcActiveProject: string | null;
   setHcActiveProject: (proj: string | null) => void;
+
+  // Identity stamped onto every saved graph. Phase 3 replaces this with the
+  // name held server-side against the user's access key, so attribution cannot
+  // be changed by editing local settings.
+  engineerName: string;
+  setEngineerName: (name: string) => void;
+
+  /** Auto-capture generated graphs into the local repository. */
+  graphHistoryEnabled: boolean;
+  setGraphHistoryEnabled: (val: boolean) => void;
+
+  /** Bumped whenever the repository changes so open lists refresh. */
+  graphHistoryVersion: number;
+  bumpGraphHistoryVersion: () => void;
+
+  // Shared graph repository (Windows shared folder). Configurable rather than
+  // hardcoded so IT can move the share without a rebuild.
+  sharedFolderPath: string;
+  setSharedFolderPath: (path: string) => void;
+
+  sharedFolderSyncEnabled: boolean;
+  setSharedFolderSyncEnabled: (val: boolean) => void;
+
+  syncState: SyncState;
+  setSyncState: (state: Partial<SyncState>) => void;
+
+  /** Last confirmed write permission on the share. Persisted purely so a
+   *  read-only user does not see the full engineer UI flash on every launch
+   *  before the first probe completes. */
+  lastKnownWritable: boolean;
+  setLastKnownWritable: (val: boolean) => void;
+
+  /** Bumped to ask the background sync loop for an immediate pass — used by
+   *  the "Sync Now" button and by auto-save so a new graph publishes at once
+   *  instead of waiting for the next tick. Session-only. */
+  syncRequestVersion: number;
+  requestSync: () => void;
+
+  // Telegram NCC Data tab — lifted out of the component so the Daily Evaluation
+  // tab can reuse the parsed records ("Reuse NCC Data"). Session-scoped only:
+  // deliberately NOT in partialize, so a reload starts clean.
+  telegramRecords: EmsRecord[];
+  setTelegramRecords: (records: EmsRecord[]) => void;
+
+  telegramFilters: FilterState;
+  setTelegramFilters: (filters: FilterState) => void;
   // Global RAM Cache for instant dataset access (bypasses IndexedDB)
   evalDataCache: Record<string, EvalData | null>;
   setEvalDataCache: (projectId: string, data: EvalData | null) => void;
@@ -216,6 +287,36 @@ export const useAppStore = create<AppState>()(
 
       hcActiveProject: null,
       setHcActiveProject: (proj) => set({ hcActiveProject: proj }),
+
+      engineerName: '',
+      setEngineerName: (name) => set({ engineerName: name }),
+
+      graphHistoryEnabled: true,
+      setGraphHistoryEnabled: (val) => set({ graphHistoryEnabled: val }),
+
+      graphHistoryVersion: 0,
+      bumpGraphHistoryVersion: () => set((state) => ({ graphHistoryVersion: state.graphHistoryVersion + 1 })),
+
+      sharedFolderPath: '',
+      setSharedFolderPath: (path) => set({ sharedFolderPath: path }),
+
+      sharedFolderSyncEnabled: true,
+      setSharedFolderSyncEnabled: (val) => set({ sharedFolderSyncEnabled: val }),
+
+      syncState: INITIAL_SYNC_STATE,
+      setSyncState: (patch) => set((state) => ({ syncState: { ...state.syncState, ...patch } })),
+
+      syncRequestVersion: 0,
+      requestSync: () => set((state) => ({ syncRequestVersion: state.syncRequestVersion + 1 })),
+
+      lastKnownWritable: true,
+      setLastKnownWritable: (val) => set({ lastKnownWritable: val }),
+
+      telegramRecords: [],
+      setTelegramRecords: (records) => set({ telegramRecords: records }),
+
+      telegramFilters: INITIAL_FILTERS,
+      setTelegramFilters: (filters) => set({ telegramFilters: filters }),
     }),
     {
       name: 'ess-toolbox-storage', // name of the item in the storage (must be unique)
@@ -247,7 +348,12 @@ export const useAppStore = create<AppState>()(
         aiTemperature: state.aiTemperature,
         aiMemoryLimit: state.aiMemoryLimit,
         aiIncludeTelemetry: state.aiIncludeTelemetry,
-        aiEnableWebSearch: state.aiEnableWebSearch
+        aiEnableWebSearch: state.aiEnableWebSearch,
+        engineerName: state.engineerName,
+        graphHistoryEnabled: state.graphHistoryEnabled,
+        sharedFolderPath: state.sharedFolderPath,
+        sharedFolderSyncEnabled: state.sharedFolderSyncEnabled,
+        lastKnownWritable: state.lastKnownWritable
       }),
     }
   )

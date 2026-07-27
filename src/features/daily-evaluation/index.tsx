@@ -21,8 +21,9 @@ import { useAppStore } from '@/store/useAppStore';
 import { DraggableOverlay } from '@/components/DraggableOverlay';
 import type { EvalData } from '@/types/eval-data';
 import type { ActiveMetric, GraphConfig, PinnedPoint } from '@/types/graph';
+import { filterEmsRecords } from '@/features/telegram-ncc/filterRecords';
 import { parseEvaluationFiles } from './services/evaluationParser';
-import { mergeNccFile } from './services/nccMerge';
+import { mergeNccFile, mergeNccRecords } from './services/nccMerge';
 import { downloadExcelLogs } from './services/excelLogExport';
 import { copyChartsToClipboard } from './services/clipboardExport';
 import { exportSingleGraphHtml } from './services/htmlExportSingle';
@@ -31,6 +32,7 @@ import { getStatusHTML, getStatusJSX } from './utils/status';
 import { defaultGraphConfig } from './config/defaultGraphConfig';
 import { useSelection } from './hooks/useSelection';
 import { useEvalData } from './hooks/useEvalData';
+import { useGraphAutoSave } from './hooks/useGraphAutoSave';
 import { useGraphConfig } from './hooks/useGraphConfig';
 import { usePinnedPoints } from './hooks/usePinnedPoints';
 import { useExportEvents } from './hooks/useExportEvents';
@@ -75,6 +77,12 @@ export function DailyEvaluationGraph({
   const [errorMessage, setErrorMessage] = useState('');
   const showNccPCommand = useAppStore(state => state.showNccPCommand);
   const setShowNccPCommand = useAppStore(state => state.setShowNccPCommand);
+  const telegramRecords = useAppStore(state => state.telegramRecords);
+  const telegramFilters = useAppStore(state => state.telegramFilters);
+  const engineerName = useAppStore(state => state.engineerName);
+  const graphHistoryEnabled = useAppStore(state => state.graphHistoryEnabled);
+  const bumpGraphHistoryVersion = useAppStore(state => state.bumpGraphHistoryVersion);
+  const requestSync = useAppStore(state => state.requestSync);
 
   const {
     graphConfig, setGraphConfig, updateConfig, resetConfig,
@@ -211,12 +219,44 @@ export function DailyEvaluationGraph({
     setErrorMessage('');
 
     try {
-      const newData = await mergeNccFile(file, evalData);
+      const newData = await mergeNccFile(file, evalData, project);
       setEvalData(newData); (window as any).DEBUG_EVAL_DATA = newData;
       setCalcStatus('NCC Data merged successfully!');
     } catch (err: any) {
       setErrorMessage(err.message || String(err));
       setCalcStatus('Failed to parse NCC data.');
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  // Reuse the records already parsed in the Telegram NCC Data tab — the
+  // in-memory equivalent of exporting XLSX there and re-uploading it here.
+  const handleReuseNccData = async () => {
+    setErrorMessage('');
+
+    if (!evalData) {
+      setErrorMessage('Please load the main data folder first before adding NCC data.');
+      return;
+    }
+
+    // Same filters the Telegram tab's "Generate XLSX" applies, so both paths agree.
+    const rows = filterEmsRecords(telegramRecords, telegramFilters);
+    if (rows.length === 0) {
+      setErrorMessage('No NCC records found in the Telegram NCC Data tab. Drop a Telegram export (.json) there first, then try again.');
+      return;
+    }
+
+    setIsCalculating(true);
+    setCalcStatus('Merging NCC data from Telegram tab...');
+
+    try {
+      const newData = mergeNccRecords(rows, evalData, project);
+      setEvalData(newData); (window as any).DEBUG_EVAL_DATA = newData;
+      setCalcStatus(`NCC Data merged successfully (${rows.length} records).`);
+    } catch (err: any) {
+      setErrorMessage(err.message || String(err));
+      setCalcStatus('Failed to merge NCC data.');
     } finally {
       setIsCalculating(false);
     }
@@ -242,6 +282,28 @@ export function DailyEvaluationGraph({
   };
 
   useExportEvents(handleExportHtml, handleExportAllHtml, evalData);
+
+  // Capture every successfully generated graph into the local repository.
+  // Skipped in the AI Agent / export-preview panes: those render a snapshot
+  // that was already captured when it was generated.
+  useGraphAutoSave({
+    evalData,
+    project,
+    activeMetric,
+    selectedPlant,
+    showNccPCommand,
+    graphConfig,
+    pinnedPoints,
+    engineerName: engineerName || 'Unknown Engineer',
+    enabled: graphHistoryEnabled && !isAIAgentMode && !isExportPreviewMode,
+    onSaved: () => {
+      bumpGraphHistoryVersion();
+      // Publish straight away rather than waiting for the next scheduled pass,
+      // so colleagues see a new graph in seconds. No-op when no shared folder
+      // is configured or it is unreachable.
+      requestSync();
+    },
+  });
 
   return (
     <section className="flex-1 min-h-0 bg-panel border border-border-v rounded-sm flex flex-col relative overflow-hidden">
@@ -417,6 +479,19 @@ export function DailyEvaluationGraph({
               <Upload size={12} />
               NCC Data
             </Button>
+            <Button
+              onClick={handleReuseNccData}
+              disabled={isCalculating || !evalData || telegramRecords.length === 0}
+              className="bg-green-700 hover:bg-green-600 text-white h-7 text-[9px] font-bold flex items-center gap-1.5 border-0 shadow-sm"
+              title={
+                telegramRecords.length === 0
+                  ? 'No data in the Telegram NCC Data tab — drop a Telegram export (.json) there first'
+                  : 'Reuse NCC data from the Telegram NCC Data tab (no export/upload needed)'
+              }
+            >
+              <Database size={12} />
+              Reuse NCC Data
+            </Button>
             {(project === 'SNTL400' || project === 'SNTL600') && (
               <Button
                 onClick={() => setShowNccPCommand(!showNccPCommand)}
@@ -512,7 +587,7 @@ export function DailyEvaluationGraph({
 
               {evalData && (
                 <Button
-                  onClick={() => setEvalData(null)}
+                  onClick={() => { setEvalData(null); setCalcStatus(''); setErrorMessage(''); }}
                   className="w-full bg-red-600 hover:bg-red-500 text-white border-0 shadow-sm text-[10px] uppercase font-bold tracking-wider h-8 rounded mt-2 transition-all"
                 >
                   Clear Data
@@ -530,6 +605,15 @@ export function DailyEvaluationGraph({
                 <div className="h-1 bg-foreground/10 rounded-full overflow-hidden">
                   <div className="h-full bg-accent-blue transition-all duration-300" style={{ width: `${calcProgress}%` }}></div>
                 </div>
+              </div>
+            )}
+
+            {/* Completion notice. calcStatus used to be readable only while
+                isCalculating was true, which the finally-block cleared in the same
+                tick — so success messages were never actually visible. */}
+            {!isCalculating && calcStatus && !errorMessage && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 p-2.5 rounded text-[9px] font-mono">
+                {calcStatus}
               </div>
             )}
 
