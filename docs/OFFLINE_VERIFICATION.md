@@ -1,6 +1,43 @@
-# Offline Verification — Release Blocker
+# Offline Verification — Release Gate
 
 **Status: NOT PERFORMED.** This must pass on a real machine before the pilot.
+
+---
+
+## Release record
+
+Fill this in when the run happens. A result with no build identity is not a
+result — it cannot be reproduced, and it cannot be trusted six months later.
+
+| Field | Value |
+|---|---|
+| Application version | `________` (Settings → About) |
+| Commit hash | `________` |
+| Installer file | `Data Visualization Tool Setup ______.exe` |
+| Build date | `________` |
+| Verification date | `________` |
+| Operating system | `________` (e.g. Windows 11 Pro 26200) |
+| Machine | `________` |
+| Verified by | `________` |
+
+**Overall result:** ☐ PASS ☐ FAIL
+
+| Section | Result |
+|---|---|
+| A — cold start, no network | ☐ pass ☐ fail |
+| B — the paths that broke before | ☐ pass ☐ fail |
+| C — the work itself | ☐ pass ☐ fail |
+| D — persistence | ☐ pass ☐ fail |
+| E — reconnection | ☐ pass ☐ fail |
+| F — recovery | ☐ pass ☐ fail |
+
+**If any step fails:** fix the issue, build a new release candidate, and
+**restart from Part A**. Do not resume from the failed step — a fix can break
+something that already passed, and a partial run gives no evidence that it
+did not.
+
+The application version above must match the tagged source. If they differ, the
+run is void: it proves something about a build nobody can rebuild.
 
 Offline operation is the product's core promise, and it has broken twice
 already — both times silently, both times found by reading code rather than by
