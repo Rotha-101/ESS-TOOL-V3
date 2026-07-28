@@ -68,6 +68,7 @@ import { TelegramNcc } from './features/telegram-ncc';
 import { DatabaseTab } from './features/database';
 import { SettingsWindow } from './components/SettingsWindow';
 import { GlobalProgressModal } from './components/GlobalProgressModal';
+import { useAppearance } from './hooks/useAppearance';
 
 export { DailyEvaluationGraph } from './features/daily-evaluation';
 
@@ -118,13 +119,9 @@ export default function App() {
   const gridColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
   const zeroLineColor = isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
 
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
+  // Theme and density both live in useAppearance, which the activation screen
+  // also uses — see src/hooks/useAppearance.ts.
+  useAppearance();
 
   useEffect(() => {
     // Initialize audit engine asynchronously

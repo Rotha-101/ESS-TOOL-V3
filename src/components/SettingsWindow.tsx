@@ -35,6 +35,7 @@ export function SettingsWindow({ onClose, isMaximized, onToggleMaximize }: { onC
     engineerName, setEngineerName,
     graphHistoryEnabled, setGraphHistoryEnabled,
     compactTableRows, setCompactTableRows,
+    density, setDensity,
     autoRefreshDashboard, setAutoRefreshDashboard,
     refreshInterval, setRefreshInterval,
     timezone, setTimezone,
@@ -135,10 +136,45 @@ export function SettingsWindow({ onClose, isMaximized, onToggleMaximize }: { onC
                     </Select>
                   </div>
 
+                  {/* Density drives three CSS variables; every spacing, type
+                      and control-size token derives from them. No per-mode
+                      stylesheet exists. See docs/DESIGN_SYSTEM.md §3. */}
+                  <div className="bg-surface/50 p-3.5 rounded-lg border border-border-v space-y-2.5">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">Display size</span>
+                      <span className="text-xs text-foreground/45 leading-relaxed">
+                        Makes text and buttons larger or smaller throughout the app
+                      </span>
+                    </div>
+                    <div className="flex bg-panel rounded-lg border border-border-v p-0.5" role="radiogroup" aria-label="Display size">
+                      {([
+                        { id: 'compact', label: 'Compact', hint: 'Fit more on screen' },
+                        { id: 'comfortable', label: 'Standard', hint: 'Recommended' },
+                        { id: 'large', label: 'Large', hint: 'Easier to read' },
+                      ] as const).map((option) => (
+                        <button
+                          key={option.id}
+                          role="radio"
+                          aria-checked={density === option.id}
+                          onClick={() => setDensity(option.id)}
+                          title={option.hint}
+                          className={cn(
+                            'flex-1 px-3 py-2 rounded-md text-xs transition-colors',
+                            density === option.id
+                              ? 'bg-accent-blue/15 text-accent-blue font-medium'
+                              : 'text-foreground/60 hover:text-foreground',
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between bg-surface/50 p-3.5 rounded-lg border border-border-v">
                     <div className="flex flex-col pr-4">
-                      <span className="text-[12px] font-medium">Compact rows</span>
-                      <span className="text-[11px] text-foreground/45 leading-relaxed">Fit more graphs on screen at once</span>
+                      <span className="text-sm font-medium">Compact rows</span>
+                      <span className="text-xs text-foreground/45 leading-relaxed">Fit more graphs in lists</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer shrink-0">
                       <input type="checkbox" className="sr-only peer" checked={compactTableRows} onChange={(e) => setCompactTableRows(e.target.checked)} />

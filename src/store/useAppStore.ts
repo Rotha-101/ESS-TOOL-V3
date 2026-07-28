@@ -48,6 +48,12 @@ interface AppState {
   
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
+
+  /** Interface density. Drives three CSS variables from which every spacing,
+   *  type and control-size token derives — see docs/DESIGN_SYSTEM.md §2.1.
+   *  12px remains the text floor in every mode. */
+  density: 'compact' | 'comfortable' | 'large';
+  setDensity: (density: 'compact' | 'comfortable' | 'large') => void;
   
   isSettingsOpen: boolean;
   setIsSettingsOpen: (isOpen: boolean) => void;
@@ -213,6 +219,9 @@ export const useAppStore = create<AppState>()(
       
       theme: 'dark',
       setTheme: (theme) => set({ theme }),
+
+      density: 'comfortable',
+      setDensity: (density) => set({ density }),
       
       isSettingsOpen: false,
       setIsSettingsOpen: (isOpen) => set({ isSettingsOpen: isOpen }),
@@ -358,6 +367,7 @@ export const useAppStore = create<AppState>()(
         exportColumns: state.exportColumns,
         exportPreviewMode: state.exportPreviewMode,
         theme: state.theme,
+        density: state.density,
         compactTableRows: state.compactTableRows,
         autoRefreshDashboard: state.autoRefreshDashboard,
         refreshInterval: state.refreshInterval,

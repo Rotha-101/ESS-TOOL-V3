@@ -6,9 +6,10 @@
 // "show the activation screen again" — the kind of mistake that would look, to
 // a user, exactly like losing their work.
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { useAppearance } from '@/hooks/useAppearance';
 import { decideAppState } from '@/lib/appState';
 import { useActivation } from './useActivation';
 import { ActivationScreen } from './ActivationScreen';
@@ -17,14 +18,10 @@ export function ActivationGate({ children }: { children: React.ReactNode }) {
   const { activation, deviceLabel, busy, error, activate, continueOffline } = useActivation();
   const syncEnabled = useAppStore((s) => s.syncEnabled);
   const phase = useAppStore((s) => s.syncState.phase);
-  const theme = useAppStore((s) => s.theme);
-
-  // App applies the theme, but App does not render until this gate lets it —
-  // so without this the very first screen a user ever sees is the only one in
-  // the wrong theme.
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
+  // App applies appearance too, but App does not render until this gate lets
+  // it — so without this the first screen a user ever sees would be the only
+  // one in the wrong theme and density.
+  useAppearance();
 
   const policy = decideAppState({
     activation,

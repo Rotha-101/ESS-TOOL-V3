@@ -47,13 +47,104 @@
     --color-border-v: var(--border-v);
     --color-accent-blue: var(--accent-blue);
     
-    --radius-sm: 0.125rem;
-    --radius-md: 0.25rem;
-    --radius-lg: var(--radius);
+    /* ── Spacing — derives from density ───────────────────────────────── */
+    --spacing: var(--d-space);
+
+    /* ── Typography — derives from density. 12px floor in every mode. ─── */
+    --text-xs: max(0.75rem, calc(var(--d-text) - 0.0625rem));
+    --text-sm: var(--d-text);
+    --text-base: calc(var(--d-text) + 0.0625rem);
+    --text-lg: calc(var(--d-text) + 0.1875rem);
+    --text-xl: calc(var(--d-text) + 0.4375rem);
+
+    /* ── Control and icon sizing ──────────────────────────────────────── */
+    --size-control-sm: calc(var(--d-control) - 0.5rem);
+    --size-control-md: var(--d-control);
+    --size-control-lg: calc(var(--d-control) + 0.25rem);
+    --size-icon-sm: 0.75rem;
+    --size-icon-md: 1rem;
+    --size-icon-lg: 1.25rem;
+    --size-sidebar: 14rem;
+    --size-header: 3.25rem;
+
+    /* ── Radius ───────────────────────────────────────────────────────── */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5rem;
     --radius-xl: 0.75rem;
     --radius-2xl: 1rem;
     --radius-3xl: 1.5rem;
     --radius-4xl: 2rem;
+
+    /* ── Elevation. Carries hierarchy so borders need not. ────────────── */
+    --shadow-elevation-1: 0 1px 2px rgb(0 0 0 / 0.05);
+    --shadow-elevation-2: 0 4px 12px rgb(0 0 0 / 0.08);
+    --shadow-elevation-3: 0 12px 32px rgb(0 0 0 / 0.16);
+
+    /* ── Animation. Nothing exceeds --duration-slow. ──────────────────── */
+    --duration-instant: 90ms;
+    --duration-fast: 140ms;
+    --duration-normal: 220ms;
+    --duration-slow: 320ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+    /* ── Status. Never used as the ONLY signal — always icon or text. ─── */
+    --color-status-ok: var(--status-ok);
+    --color-status-busy: var(--status-busy);
+    --color-status-warn: var(--status-warn);
+    --color-status-danger: var(--status-danger);
+    --color-status-idle: var(--status-idle);
+
+    /* ── Z-index. No arbitrary values anywhere. ───────────────────────── */
+    --z-base: 0;
+    --z-sticky: 10;
+    --z-dropdown: 20;
+    --z-overlay: 30;
+    --z-modal: 40;
+    --z-toast: 50;
+    --z-tooltip: 60;
+
+    /* ── Breakpoints. A resizable desktop window, not a website. ──────── */
+    --breakpoint-sm: 900px;
+    --breakpoint-md: 1200px;
+    --breakpoint-lg: 1600px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   DENSITY
+   Three variables. Everything else derives from them, so adding a mode is
+   three lines rather than a second stylesheet.
+
+   Verified: Tailwind v4 compiles spacing utilities to
+   `calc(var(--spacing) * N)`, so overriding --spacing on a subtree rescales
+   every p-/h-/gap- utility at runtime. See docs/DESIGN_SYSTEM.md §2.1.
+
+   12px is the floor in EVERY mode, including compact.
+   ───────────────────────────────────────────────────────────────────────── */
+:root,
+[data-density='comfortable'] {
+    --d-space: 0.25rem;
+    --d-text: 0.8125rem;
+    --d-control: 2.25rem;
+}
+
+[data-density='compact'] {
+    --d-space: 0.1875rem;
+    --d-text: 0.75rem;
+    --d-control: 1.875rem;
+}
+
+[data-density='large'] {
+    --d-space: 0.3125rem;
+    --d-text: 0.9375rem;
+    --d-control: 2.75rem;
+}
+
+/* The ten analysis modules are pixel-tuned around Plotly containers. They opt
+   out of density so a preference change can never move a chart. */
+.module-surface {
+    --spacing: 0.25rem;
 }
 
 :root {
@@ -86,7 +177,15 @@
     --chart-3: #EAB308;
     --chart-4: #EF4444;
     --chart-5: #8B5CF6;
-    --radius: 0.25rem;
+    --radius: 0.5rem;
+
+    /* Status. Light-theme values chosen for AA contrast on --panel. */
+    --status-ok: #15803D;
+    --status-busy: #0369A1;
+    --status-warn: #B45309;
+    --status-danger: #B91C1C;
+    --status-idle: rgba(0, 0, 0, 0.45);
+
     --sidebar: #F3F4F6;
     --sidebar-foreground: #111827;
     --sidebar-primary: #00A3FF;
@@ -130,6 +229,14 @@
     --chart-3: #EAB308;
     --chart-4: #EF4444;
     --chart-5: #8B5CF6;
+
+    /* Status. Lightened for AA contrast on the dark --panel (#14161B). */
+    --status-ok: #4ADE80;
+    --status-busy: #38BDF8;
+    --status-warn: #FBBF24;
+    --status-danger: #F87171;
+    --status-idle: rgba(255, 255, 255, 0.45);
+
     --sidebar: #14161B;
     --sidebar-foreground: #E0E0E0;
     --sidebar-primary: #00A3FF;
@@ -396,3 +503,30 @@
     flex-direction: row !important;
 }
 
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ACCESSIBILITY
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Anyone who has asked their operating system to reduce motion has asked us
+   too. Applies to Plotly transitions as well, which is why it is global. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* A visible focus ring on everything reachable by keyboard. The codebase has
+   several `outline-none` declarations with no replacement, which leaves a
+   keyboard user with no idea where they are. This is the safety net; it uses
+   :focus-visible so it never appears for mouse users. */
+:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
