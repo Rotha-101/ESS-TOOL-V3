@@ -16,6 +16,12 @@ export default defineConfig(({ mode }) => {
       // Stamped onto every saved graph so a record always says which build
       // produced it. Single source of truth is package.json.
       __APP_VERSION__: JSON.stringify(pkg.version),
+      // Backend endpoint baked into the build, so no user ever types a URL.
+      // Override per build with ESS_SERVER_URL (an enterprise deployment, or a
+      // staging build). Consumed only by src/lib/config/serverConfig.ts.
+      __SYNC_SERVER_URL__: JSON.stringify(
+        env.ESS_SERVER_URL || 'https://ess-graph-repository.rotha2002-edu.workers.dev',
+      ),
       global: 'window',
     },
     resolve: {

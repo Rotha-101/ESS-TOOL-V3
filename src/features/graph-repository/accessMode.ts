@@ -8,7 +8,11 @@
 import type { SyncState } from '@/store/useAppStore';
 
 export interface AccessInputs {
-  serverUrl: string;
+  /** Does this computer hold an accepted activation? Replaces the old
+   *  `serverUrl` input: the endpoint is now baked into the build, so "is a
+   *  server configured" stopped being the question. "Has this device been
+   *  activated" is. The meaning of the branch is unchanged. */
+  enrolled: boolean;
   syncEnabled: boolean;
   phase: SyncState['phase'];
   /** Write permission from the most recent successful probe. */
@@ -21,7 +25,7 @@ export interface AccessInputs {
  * Read-only applies ONLY when the server has been positively confirmed
  * reachable but not writable. Every other state means full access:
  *
- *   no folder configured   → standalone engineer (Phase 1 behaviour)
+ *   not activated yet      → standalone engineer, full local access
  *   sync switched off      → engineer chose to work locally
  *   offline / not probed   → last known answer, defaulting to full access
  *
@@ -31,13 +35,13 @@ export interface AccessInputs {
  * what is worth showing, never what is allowed.
  */
 export function decideReadOnly({
-  serverUrl,
+  enrolled,
   syncEnabled,
   phase,
   writable,
   lastKnownWritable,
 }: AccessInputs): boolean {
-  if (!serverUrl || !syncEnabled) return false;
+  if (!enrolled || !syncEnabled) return false;
 
   // 'ok' and 'error' both mean the probe reached the server, so `writable` is
   // current. 'offline', 'syncing' and 'idle' fall back to what we saw last.

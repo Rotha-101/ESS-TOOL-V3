@@ -19,11 +19,13 @@ const relativeTime = (iso: string | null): string => {
   return `${Math.floor(seconds / 86400)}d ago`;
 };
 
+/** Three things a user needs: saved, working on it, or not connected. Every
+ *  other distinction the sync engine makes is internal. */
 function badgeFor(state: SyncState, configured: boolean) {
   if (!configured) {
     return {
-      icon: <Settings2 size={11} />,
-      label: 'Not configured',
+      icon: <CloudOff size={11} />,
+      label: 'This computer only',
       tone: 'text-foreground/50 border-foreground/15 bg-foreground/5',
     };
   }
@@ -31,21 +33,24 @@ function badgeFor(state: SyncState, configured: boolean) {
     case 'syncing':
       return { icon: <Loader2 size={11} className="animate-spin" />, label: 'Syncing', tone: 'text-accent-blue border-accent-blue/30 bg-accent-blue/10' };
     case 'ok':
-      return { icon: <Check size={11} />, label: 'Synced', tone: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' };
+      return { icon: <Check size={11} />, label: 'Saved', tone: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' };
     case 'offline':
       return { icon: <CloudOff size={11} />, label: 'Offline', tone: 'text-amber-400 border-amber-500/30 bg-amber-500/10' };
     case 'error':
-      return { icon: <AlertTriangle size={11} />, label: 'Sync issue', tone: 'text-red-400 border-red-500/30 bg-red-500/10' };
+      // Not "sync issue" — the retry is automatic, so the user has nothing to
+      // do and should not be alarmed into trying.
+      return { icon: <AlertTriangle size={11} />, label: 'Retrying', tone: 'text-amber-400 border-amber-500/30 bg-amber-500/10' };
     default:
-      return { icon: <RefreshCw size={11} />, label: 'Idle', tone: 'text-foreground/50 border-foreground/15 bg-foreground/5' };
+      return { icon: <Check size={11} />, label: 'Saved', tone: 'text-foreground/50 border-foreground/15 bg-foreground/5' };
   }
 }
 
 export function SyncStatusBar({ state, onSync }: { state: SyncState; onSync: () => void }) {
-  const serverUrl = useAppStore((s) => s.serverUrl);
   const setIsSettingsOpen = useAppStore((s) => s.setIsSettingsOpen);
 
-  const configured = Boolean(serverUrl);
+  // "Configured" is now "activated". The endpoint ships with the build, so
+  // there is nothing for a user to set up — only an account to connect.
+  const configured = useAppStore((s) => s.activation === 'active');
   const badge = badgeFor(state, configured);
   const busy = state.phase === 'syncing';
 
@@ -86,21 +91,26 @@ export function SyncStatusBar({ state, onSync }: { state: SyncState; onSync: () 
       )}
 
       <div className="ml-auto flex items-center gap-2">
-        {state.lastSyncAt && <span className="text-foreground/30">Last sync {relativeTime(state.lastSyncAt)}</span>}
+        {state.lastSyncAt && <span className="text-foreground/30">Updated {relativeTime(state.lastSyncAt)}</span>}
         {configured ? (
+          // Refresh, not "Sync Now". Synchronisation is automatic — on a timer,
+          // on window focus, on regaining connectivity, and the moment a graph
+          // is generated. A button labelled "Sync Now" implied the user was
+          // responsible for something they never were.
           <button
             onClick={onSync}
             disabled={busy}
+            title="Check for new graphs now. This also happens automatically."
             className="h-6 px-2 rounded bg-slate-700 hover:bg-slate-600 text-white font-bold flex items-center gap-1 disabled:opacity-50"
           >
-            {busy ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />} SYNC NOW
+            {busy ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />} REFRESH
           </button>
         ) : (
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="h-6 px-2 rounded bg-accent-blue hover:bg-blue-600 text-white font-bold flex items-center gap-1"
           >
-            <Settings2 size={10} /> CONFIGURE REPOSITORY
+            <Settings2 size={10} /> CONNECT ACCOUNT
           </button>
         )}
       </div>

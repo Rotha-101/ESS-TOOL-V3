@@ -13,6 +13,7 @@
 
 import { loadGraphMeta, loadGraphRecord } from '@/lib/history-db';
 import { createTransport, ensurePayload } from '@/lib/sync';
+import { hasServerConfigured } from '@/lib/config/serverConfig';
 import { useAppStore } from '@/store/useAppStore';
 import type { GraphRecord } from '@/lib/graph-codec';
 
@@ -54,17 +55,17 @@ export async function ensureGraphRecord(
     throw new PayloadUnavailableError('This graph is not in the local repository.');
   }
 
-  const { serverUrl, syncEnabled } = useAppStore.getState();
-  if (!serverUrl || !syncEnabled) {
+  const { syncEnabled } = useAppStore.getState();
+  if (!syncEnabled || !hasServerConfigured()) {
     throw new PayloadUnavailableError(
-      'This graph has not been downloaded to this computer yet, and synchronization is turned off. Turn it on in Settings to fetch it.',
+      'This graph has not been downloaded to this computer yet, and this computer is set to work offline.',
     );
   }
 
   onDownloadStart?.();
 
   try {
-    const payload = await ensurePayload(createTransport(serverUrl), meta);
+    const payload = await ensurePayload(createTransport(), meta);
     return { meta, payload };
   } catch (err: any) {
     throw new PayloadUnavailableError(

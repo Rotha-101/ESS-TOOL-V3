@@ -30,6 +30,7 @@ import { useAppStore } from '@/store/useAppStore';
 import type { SyncState } from '@/store/useAppStore';
 import { listPendingUploads } from '@/lib/history-db';
 import { createTransport, runSync } from '@/lib/sync';
+import { hasServerConfigured } from '@/lib/config/serverConfig';
 
 const INTERVAL_CONNECTED = 5 * 60 * 1000;
 const INTERVAL_UNREACHABLE = 15 * 60 * 1000;
@@ -46,28 +47,31 @@ let rerunRequested = false;
 export function useBackgroundSync() {
   const setSyncState = useAppStore((s) => s.setSyncState);
   const setLastKnownWritable = useAppStore((s) => s.setLastKnownWritable);
+  const setEngineerName = useAppStore((s) => s.setEngineerName);
   const bumpGraphHistoryVersion = useAppStore((s) => s.bumpGraphHistoryVersion);
   const syncRequestVersion = useAppStore((s) => s.syncRequestVersion);
-  const serverUrl = useAppStore((s) => s.serverUrl);
   const enabled = useAppStore((s) => s.syncEnabled);
+  const activated = useAppStore((s) => s.activation === 'active');
 
-  // Read config at call time so editing the path in Settings takes effect on
-  // the next pass without tearing down and rebuilding the timer.
-  const config = useRef({ serverUrl, enabled });
-  config.current = { serverUrl, enabled };
+  // Read config at call time so a change takes effect on the next pass without
+  // tearing down and rebuilding the timer.
+  const config = useRef({ enabled, activated });
+  config.current = { enabled, activated };
 
   const lastAttemptAt = useRef(0);
 
   /** One pass. Resolves to the resulting phase so the loop can pick its delay. */
   const sync = useCallback(async (): Promise<SyncState['phase']> => {
-    const { serverUrl: root, enabled: on } = config.current;
+    const { enabled: on, activated } = config.current;
 
     if (!on) {
-      setSyncState({ phase: 'idle', message: 'Synchronization is turned off.' });
+      setSyncState({ phase: 'idle', message: 'Working on this computer only.' });
       return 'idle';
     }
-    if (!root) {
-      setSyncState({ phase: 'idle', message: 'No server configured yet.' });
+    // Not activated yet, or no endpoint in this build. Neither is an error —
+    // the app is local-first and fully usable in both cases.
+    if (!activated || !hasServerConfigured()) {
+      setSyncState({ phase: 'idle', message: '' });
       return 'idle';
     }
     if (passInFlight) {
@@ -81,7 +85,7 @@ export function useBackgroundSync() {
 
     let phase: SyncState['phase'] = 'ok';
     try {
-      const result = await runSync(createTransport(root), {
+      const result = await runSync(createTransport(), {
         onProgress: (message) => setSyncState({ message }),
       });
       const pending = (await listPendingUploads()).length;
@@ -98,6 +102,10 @@ export function useBackgroundSync() {
         // The server answered, so this is the authoritative access answer.
         // Remembered so the next launch renders the right UI immediately.
         setLastKnownWritable(result.status.writable);
+        // Identity is server-owned. Recording it here is what lets the account
+        // card display who you are without anyone typing it — and what makes
+        // the old editable "Engineer Name" field unnecessary.
+        setEngineerName(result.status.userName || '');
 
         if (result.downloaded > 0 || result.uploaded > 0) bumpGraphHistoryVersion();
 
@@ -112,6 +120,8 @@ export function useBackgroundSync() {
         setSyncState({
           phase,
           writable: result.status.writable,
+          userName: result.status.userName ?? null,
+          role: (result.status.role as any) ?? 'unknown',
           lastSyncAt: result.finishedAt,
           downloaded: result.downloaded,
           uploaded: result.uploaded,
@@ -137,7 +147,7 @@ export function useBackgroundSync() {
       return sync();
     }
     return phase;
-  }, [setSyncState, setLastKnownWritable, bumpGraphHistoryVersion]);
+  }, [setSyncState, setLastKnownWritable, setEngineerName, bumpGraphHistoryVersion]);
 
   // The loop. Runs once on startup, then reschedules itself after each pass.
   useEffect(() => {

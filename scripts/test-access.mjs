@@ -17,7 +17,10 @@ const out = esbuild.buildSync({
 });
 const { decideReadOnly } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
 
-const SERVER = 'https://graphs.example.workers.dev';
+// Activation replaces the old "is a server URL configured" input. The truth
+// table below is unchanged: enrolled:false means exactly what serverUrl:""
+// used to — no relationship with a service, therefore full local access.
+const ENROLLED = true;
 let pass = 0; const failures = [];
 const check = (name, actual, expected) => {
   if (actual === expected) { pass++; console.log(`  PASS  ${name}`); }
@@ -25,38 +28,38 @@ const check = (name, actual, expected) => {
 };
 
 console.log('\n=== Engineer scenarios (must NEVER be locked out) ===');
-check('no server configured → full access',
-  decideReadOnly({ serverUrl: '', syncEnabled: true, phase: 'idle', writable: false, lastKnownWritable: false }), false);
+check('not activated → full access',
+  decideReadOnly({ enrolled: false, syncEnabled: true, phase: 'idle', writable: false, lastKnownWritable: false }), false);
 check('sync switched off → full access (escape hatch)',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: false, phase: 'ok', writable: false, lastKnownWritable: false }), false);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: false, phase: 'ok', writable: false, lastKnownWritable: false }), false);
 check('writable account, confirmed → full access',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'ok', writable: true, lastKnownWritable: true }), false);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'ok', writable: true, lastKnownWritable: true }), false);
 check('engineer offline (was writable) → full access, keeps working',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'offline', writable: false, lastKnownWritable: true }), false);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'offline', writable: false, lastKnownWritable: true }), false);
 check('engineer first launch, not probed yet → full access',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'idle', writable: false, lastKnownWritable: true }), false);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'idle', writable: false, lastKnownWritable: true }), false);
 check('engineer mid-sync → full access',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'syncing', writable: false, lastKnownWritable: true }), false);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'syncing', writable: false, lastKnownWritable: true }), false);
 check('server reachable with record failures, still writable → full access',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'error', writable: true, lastKnownWritable: true }), false);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'error', writable: true, lastKnownWritable: true }), false);
 
 console.log('\n=== Top Management scenarios (must be read-only) ===');
 check('read-only account, confirmed → read only',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'ok', writable: false, lastKnownWritable: false }), true);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'ok', writable: false, lastKnownWritable: false }), true);
 check('read-only account with record failures → read only',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'error', writable: false, lastKnownWritable: false }), true);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'error', writable: false, lastKnownWritable: false }), true);
 check('management launch before first probe → read only (no UI flash)',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'idle', writable: false, lastKnownWritable: false }), true);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'idle', writable: false, lastKnownWritable: false }), true);
 check('management mid-sync → stays read only',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'syncing', writable: false, lastKnownWritable: false }), true);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'syncing', writable: false, lastKnownWritable: false }), true);
 check('management offline → stays read only',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'offline', writable: false, lastKnownWritable: false }), true);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'offline', writable: false, lastKnownWritable: false }), true);
 
 console.log('\n=== Permission changes take effect on the next probe ===');
 check('engineer demoted to read-only → locks once confirmed',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'ok', writable: false, lastKnownWritable: true }), true);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'ok', writable: false, lastKnownWritable: true }), true);
 check('manager promoted to writable → unlocks once confirmed',
-  decideReadOnly({ serverUrl: SERVER, syncEnabled: true, phase: 'ok', writable: true, lastKnownWritable: false }), false);
+  decideReadOnly({ enrolled: ENROLLED, syncEnabled: true, phase: 'ok', writable: true, lastKnownWritable: false }), false);
 
 console.log('\n============================================');
 console.log(`checks passed : ${pass}`);

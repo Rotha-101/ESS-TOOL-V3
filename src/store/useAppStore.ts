@@ -4,18 +4,23 @@ import type { WorkbookPreviewSource } from '../components/WorkbookPreview';
 import type { EvalData } from '../types/eval-data';
 import type { EmsRecord, FilterState } from '../features/telegram-ncc/types';
 import { INITIAL_FILTERS } from '../features/telegram-ncc/constants';
+import { connectServerConfig } from '../lib/config/serverConfig';
 
 /** Live sync status. Session-only — it describes right now, not a preference. */
 export interface SyncState {
   /** idle before the first pass has run. */
   phase: 'idle' | 'syncing' | 'ok' | 'offline' | 'error';
   message: string;
-  /** False for Management (read-only share permissions). */
+  /** False for Management (read-only accounts). */
   writable: boolean;
   lastSyncAt: string | null;
   downloaded: number;
   uploaded: number;
   pending: number;
+  /** Server-owned identity, from the last successful probe. Display only —
+   *  the application must never let a user edit these. */
+  userName: string | null;
+  role: 'engineer' | 'viewer' | 'admin' | 'unknown' | null;
 }
 
 export const INITIAL_SYNC_STATE: SyncState = {
@@ -26,7 +31,13 @@ export const INITIAL_SYNC_STATE: SyncState = {
   downloaded: 0,
   uploaded: 0,
   pending: 0,
+  userName: null,
+  role: null,
 };
+
+/** Whether this computer holds an accepted activation. Session-only: it is
+ *  answered from the credential store at startup, never from a preference. */
+export type ActivationState = 'unknown' | 'none' | 'active' | 'pending' | 'rejected';
 
 interface AppState {
   activeTab: string;
@@ -144,10 +155,21 @@ interface AppState {
   graphHistoryVersion: number;
   bumpGraphHistoryVersion: () => void;
 
-  // Shared graph repository service. Configurable rather than
-  // hardcoded so the service can move without a rebuild.
+  /**
+   * ADMINISTRATOR OVERRIDE ONLY. Empty means "use the endpoint this build
+   * shipped with", which is the normal case for every user.
+   *
+   * Never read this directly — go through src/lib/config/serverConfig.ts,
+   * which resolves override-then-build-default. It is exposed here only so an
+   * administrator can repoint one machine without a rebuild.
+   */
   serverUrl: string;
   setServerUrl: (path: string) => void;
+
+  /** Has this computer been activated? Session-only; resolved at startup from
+   *  the credential store, never from a saved preference. */
+  activation: ActivationState;
+  setActivation: (state: ActivationState) => void;
 
   syncEnabled: boolean;
   setSyncEnabled: (val: boolean) => void;
@@ -300,6 +322,9 @@ export const useAppStore = create<AppState>()(
       serverUrl: '',
       setServerUrl: (path) => set({ serverUrl: path }),
 
+      activation: 'unknown',
+      setActivation: (state) => set({ activation: state }),
+
       syncEnabled: true,
       setSyncEnabled: (val) => set({ syncEnabled: val }),
 
@@ -358,3 +383,9 @@ export const useAppStore = create<AppState>()(
     }
   )
 );
+
+// Hand the server configuration provider a way to read the administrator
+// override. Done here, once, so serverConfig.ts stays free of a store import —
+// it has to be callable from plain functions outside React (background sync
+// passes, the Electron bridge), and a hook dependency would prevent that.
+connectServerConfig(() => useAppStore.getState().serverUrl);

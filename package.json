@@ -39,7 +39,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit && node scripts/check-export-templates.cjs",
-    "test": "node scripts/test-codec.mjs && node scripts/test-history.mjs && node scripts/test-api.mjs && node scripts/test-sync.mjs && node scripts/test-access.mjs && node scripts/test-two-machine.mjs",
+    "test": "node scripts/test-codec.mjs && node scripts/test-history.mjs && node scripts/test-api.mjs && node scripts/test-sync.mjs && node scripts/test-access.mjs && node scripts/test-appstate.mjs && node scripts/test-two-machine.mjs",
     "electron:dev": "concurrently \"vite --port 3000 --strictPort\" \"electron .\"",
     "electron:build": "vite build && electron-builder"
   },
