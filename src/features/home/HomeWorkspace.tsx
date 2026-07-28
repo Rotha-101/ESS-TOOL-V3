@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { decideAppState } from '@/lib/appState';
 import { listGraphHistory, type GraphHistoryEntry } from '@/lib/history-db';
+import { getDBItem } from '@/lib/db';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusPill } from '@/components/ui/status-pill';
 
@@ -68,6 +69,9 @@ export function HomeWorkspace({ project, onNavigate, onOpenGraph }: HomeWorkspac
 
   const [recent, setRecent] = useState<GraphHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  /** Is there a dataset loaded for this project but not yet turned into a
+   *  graph? Decides whether the next step is Import or Daily Evaluation. */
+  const [hasWorkingData, setHasWorkingData] = useState(false);
   const [tipDismissed, setTipDismissed] = useState(
     () => localStorage.getItem(TIP_DISMISSED_KEY) === '1',
   );
@@ -83,41 +87,74 @@ export function HomeWorkspace({ project, onNavigate, onOpenGraph }: HomeWorkspac
     let cancelled = false;
     (async () => {
       try {
-        const all = await listGraphHistory();
-        if (!cancelled) setRecent(all.slice(0, 5));
+        const [all, working] = await Promise.all([
+          listGraphHistory(),
+          getDBItem<unknown>(`eval_data_${project}`),
+        ]);
+        if (cancelled) return;
+        setRecent(all.filter((e) => !project || e.project === project).slice(0, 5));
+        setHasWorkingData(Boolean(working));
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [graphHistoryVersion]);
+  }, [graphHistoryVersion, project]);
 
   const name = syncState.userName || '';
 
-  const actions = useMemo(
-    () => [
+  /**
+   * The primary action follows the user's situation rather than always
+   * pointing at the same screen.
+   *
+   *   nothing yet                → Import data
+   *   data loaded, no graph yet  → Daily Evaluation
+   *   previous work exists       → Continue where they left off
+   *
+   * A first-time user is told where to start; someone mid-task is offered the
+   * thing they were doing. The other two cards stay available at lower weight,
+   * so nothing is hidden — only de-emphasised.
+   */
+  const primaryId: 'signal' | 'soc' | 'continue' =
+    recent.length > 0 ? 'continue' : hasWorkingData ? 'soc' : 'signal';
+
+  const actions = useMemo(() => {
+    const mostRecent = recent[0];
+    return [
+      {
+        id: 'continue',
+        icon: History,
+        title: 'Continue previous work',
+        description: mostRecent
+          ? `${mostRecent.project} · ${mostRecent.dataDate}`
+          : 'Pick up where you left off',
+        hidden: recent.length === 0,
+        onSelect: () => mostRecent && onOpenGraph(mostRecent.id),
+      },
       {
         id: 'signal',
         icon: Upload,
         title: 'Import data',
         description: 'Load spreadsheets and check them',
+        onSelect: () => onNavigate('signal'),
       },
       {
         id: 'soc',
         icon: Battery,
         title: 'Daily Evaluation',
         description: 'Generate the daily graph',
-        primary: true,
+        onSelect: () => onNavigate('soc'),
       },
       {
         id: 'export',
         icon: Download,
         title: 'Reports & Export',
         description: 'Share results with your team',
+        hidden: recent.length > 0, // keeps the row to three cards
+        onSelect: () => onNavigate('export'),
       },
-    ],
-    [],
-  );
+    ].filter((a) => !a.hidden);
+  }, [recent, onNavigate, onOpenGraph]);
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
@@ -158,8 +195,8 @@ export function HomeWorkspace({ project, onNavigate, onOpenGraph }: HomeWorkspac
                 icon={action.icon}
                 title={action.title}
                 description={action.description}
-                primary={action.primary}
-                onClick={() => onNavigate(action.id)}
+                primary={action.id === primaryId}
+                onClick={action.onSelect}
               />
             ))}
           </div>
@@ -278,23 +315,68 @@ function ActionCard({
 }
 
 /**
- * One past graph.
+ * A piece of past work, normalised.
  *
- * Shows project, date, who made it, when, and whether it is on this computer.
- * Analysis type is a fixed label today because Daily Evaluation is the only
- * kind of graph stored — the row is laid out so adding it later is a field,
- * not a redesign.
+ * Every field the row can show is declared here rather than read ad hoc from a
+ * GraphHistoryEntry, so adding real analysis types — or a source other than
+ * graph history — is a change to this mapper and nothing else.
+ *
+ * `analysisType` is fixed today because Daily Evaluation is the only kind of
+ * graph stored. It is a field, not a constant, precisely so that stops being
+ * true without a redesign.
  */
-function RecentRow({ entry, onOpen }: { entry: GraphHistoryEntry; onOpen: () => void }) {
-  const cached = entry.payloadCached !== false;
+export interface RecentWorkItem {
+  id: string;
+  project: string;
+  analysisType: string;
+  /** The day the data describes. */
+  dataDate: string;
+  /** When the work was produced. ISO. */
+  lastModified: string;
+  author: string;
+  /** Whether it can be opened without a network round-trip. */
+  saveStatus: 'on-this-computer' | 'in-the-cloud';
+  /** Present when the work can be resumed rather than only viewed. Null today
+   *  for every entry: a stored graph is immutable, so "continue" and "open"
+   *  are the same action until editable drafts exist. */
+  continueTo: string | null;
+}
+
+function toRecentWorkItem(entry: GraphHistoryEntry): RecentWorkItem {
+  return {
+    id: entry.id,
+    project: entry.project,
+    analysisType: 'Daily Evaluation',
+    dataDate: entry.dataDate,
+    lastModified: entry.generatedAt,
+    author: entry.engineerName,
+    saveStatus: entry.payloadCached === false ? 'in-the-cloud' : 'on-this-computer',
+    continueTo: null,
+  };
+}
+
+const SAVE_STATUS_LABEL: Record<RecentWorkItem['saveStatus'], string> = {
+  'on-this-computer': 'Saved on this computer',
+  'in-the-cloud': 'Opens from the cloud',
+};
+
+function RecentRow({
+  entry,
+  onOpen,
+  onContinue,
+}: {
+  entry: GraphHistoryEntry;
+  onOpen: () => void;
+  onContinue?: (item: RecentWorkItem) => void;
+}) {
+  const item = toRecentWorkItem(entry);
+
   return (
     <li>
-      <button
-        onClick={onOpen}
+      <div
         className={cn(
-          'w-full flex items-center gap-3 rounded-lg px-4 py-3 text-left transition-colors',
+          'group w-full flex items-center gap-3 rounded-lg px-4 py-3 transition-colors',
           'bg-surface/40 hover:bg-surface',
-          'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         )}
       >
         <div
@@ -305,28 +387,49 @@ function RecentRow({ entry, onOpen }: { entry: GraphHistoryEntry; onOpen: () => 
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium truncate">{entry.project}</span>
-            <span className="text-xs text-foreground/40">·</span>
-            <span className="text-sm text-foreground/70">{entry.dataDate}</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium truncate">{item.project}</span>
+            <span className="text-xs text-foreground-subtle" aria-hidden="true">·</span>
+            <span className="text-sm text-foreground-muted">{item.dataDate}</span>
+            <span className="text-xs text-foreground-subtle px-1.5 py-0.5 rounded bg-foreground/5">
+              {item.analysisType}
+            </span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-foreground/45 mt-0.5">
-            <span className="truncate max-w-[180px]">{entry.engineerName}</span>
+          <div className="flex items-center gap-2 text-xs text-foreground-subtle mt-0.5 flex-wrap">
+            <span className="truncate max-w-[180px]">{item.author}</span>
             <span aria-hidden="true">·</span>
             <span className="flex items-center gap-1">
               <Clock className="size-3" aria-hidden="true" />
-              {relativeTime(entry.generatedAt)}
+              {relativeTime(item.lastModified)}
             </span>
+            <span aria-hidden="true">·</span>
+            <span>{SAVE_STATUS_LABEL[item.saveStatus]}</span>
           </div>
         </div>
 
-        {/* Sync state, stated plainly. Not an icon a user has to decode. */}
-        <span className="text-xs text-foreground/40 shrink-0 hidden sm:block">
-          {cached ? 'On this computer' : 'Opens from the cloud'}
-        </span>
+        {/* Continue is only rendered when the work can actually be resumed, so
+            it never becomes a button that does the same thing as its neighbour. */}
+        {item.continueTo && onContinue && (
+          <button
+            onClick={() => onContinue(item)}
+            className="shrink-0 h-8 px-3 rounded-md text-xs font-medium bg-foreground/5 hover:bg-foreground/10 transition-colors"
+          >
+            Continue
+          </button>
+        )}
 
-        <ArrowRight className="size-4 text-foreground/25 group-hover:text-foreground/50 shrink-0" aria-hidden="true" />
-      </button>
+        <button
+          onClick={onOpen}
+          aria-label={`Open ${item.project} ${item.dataDate}`}
+          className={cn(
+            'shrink-0 h-8 px-3 rounded-md text-xs font-medium flex items-center gap-1',
+            'bg-foreground/5 hover:bg-accent-blue hover:text-white transition-colors',
+            'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          )}
+        >
+          Open <ArrowRight className="size-3" aria-hidden="true" />
+        </button>
+      </div>
     </li>
   );
 }
