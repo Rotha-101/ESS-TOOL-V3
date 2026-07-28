@@ -11,15 +11,22 @@
 //
 // The cursor is the set of ids already held locally, never a timestamp, so
 // clock differences between workstations and the server are irrelevant.
+//
+// A pass moves METADATA only (~1.9 KB per record). The ~0.84 MB series block is
+// fetched by `ensurePayload` the first time someone opens that graph, and
+// cached locally from then on. So synchronisation stays light regardless of how
+// much history exists, and a graph that has been opened once stays available
+// offline.
 
 import {
-  importRemoteRecord,
+  importRemoteMeta,
   listKnownIds,
   listPendingUploads,
   loadGraphRecord,
   markSynced,
+  putPayload,
 } from '@/lib/history-db';
-import { sha256Hex } from '@/lib/graph-codec';
+import { sha256Hex, type GraphRecordMeta } from '@/lib/graph-codec';
 import type { RecordRef, SyncTransport, TransportStatus } from './types';
 
 export interface SyncResult {
@@ -43,7 +50,9 @@ export interface SyncOptions {
   /** Progress callback for the status UI. */
   onProgress?: (message: string) => void;
   /** Cap per pass so a first run against a repository holding years of history
-   *  stays responsive; the next pass picks up the remainder. */
+   *  stays responsive; the next pass picks up the remainder. Metadata-sized
+   *  now that payloads are lazy — ~1.9 KB each rather than ~0.84 MB — so this
+   *  can be far higher than it was without hurting a first sync. */
   maxDownloads?: number;
 }
 
@@ -59,7 +68,7 @@ const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
  */
 export async function runSync(
   transport: SyncTransport,
-  { onProgress, maxDownloads = 50 }: SyncOptions = {},
+  { onProgress, maxDownloads = 500 }: SyncOptions = {},
 ): Promise<SyncResult> {
   const status = await transport.probe();
   if (!status.reachable) return emptyResult(status);
@@ -77,9 +86,9 @@ export async function runSync(
 
     for (let i = 0; i < missing.length; i++) {
       const ref = missing[i];
-      onProgress?.(`Downloading graph ${i + 1} of ${missing.length}…`);
+      onProgress?.(`Receiving graph ${i + 1} of ${missing.length}…`);
       try {
-        await downloadRecord(transport, ref);
+        await downloadMeta(transport, ref);
         downloaded++;
       } catch (err: any) {
         // One bad record must not abandon the rest of the pass.
@@ -124,18 +133,23 @@ export async function runSync(
   return { status, downloaded, uploaded, failures, finishedAt: new Date().toISOString() };
 }
 
-/** Fetch one record and verify it before it enters local history.
+/** Fetch one record's METADATA and verify it before it enters local history.
+ *
+ * The ~0.84 MB series block is deliberately not fetched here. Metadata is
+ * ~1.9 KB, so a machine that has been offline for a month catches up on
+ * hundreds of graphs in a single small request instead of downloading data
+ * nobody has asked to look at. The payload arrives on first open, via
+ * `ensurePayload`, and is cached from then on.
  *
  * The service validates on upload, so this is defence in depth rather than the
- * only gate — but it is what catches a truncated or interrupted download, which
- * no amount of server-side checking can prevent. Every check is cheap and every
- * failure is per-record. */
-async function downloadRecord(transport: SyncTransport, ref: RecordRef): Promise<void> {
+ * only gate. Every check is cheap and every failure is per-record. */
+async function downloadMeta(transport: SyncTransport, ref: RecordRef): Promise<void> {
   const meta = await transport.fetchMeta(ref);
 
-  // Structural check before the checksum. A response that parses as JSON but is
-  // not a graph record would otherwise sail past the checksum test below simply
-  // by not declaring one, and only fail much later when someone opened it.
+  // Structural check. A response that parses as JSON but is not a graph record
+  // would otherwise be stored and only fail much later, when someone opened it.
+  // `payload.sha256` matters especially: it is the only thing that will make
+  // the later payload fetch verifiable.
   if (!meta?.id || !meta.project || !meta.dataDate || !meta.payload?.sha256) {
     throw new Error('not a valid graph record (missing id, project, date or checksum)');
   }
@@ -148,13 +162,33 @@ async function downloadRecord(transport: SyncTransport, ref: RecordRef): Promise
     throw new Error(`id mismatch: listed as "${ref.id}", contents say "${meta.id}"`);
   }
 
-  const payload = await transport.fetchPayload(ref);
+  await importRemoteMeta(meta);
+}
 
-  // Catches a truncated transfer before a corrupt graph is stored and then
-  // presented as genuine.
+/**
+ * Fetch and cache the series block for a record whose metadata is already held.
+ *
+ * Called when someone actually opens a graph, not during sync. Verifying the
+ * checksum here is what catches a truncated or interrupted transfer — no amount
+ * of server-side validation can prevent that, because it happens after the
+ * server is done.
+ *
+ * A failure caches nothing, so the next open simply tries again.
+ */
+export async function ensurePayload(
+  transport: SyncTransport,
+  meta: GraphRecordMeta,
+): Promise<Uint8Array> {
+  const payload = await transport.fetchPayload({
+    id: meta.id,
+    project: meta.project,
+    dataDate: meta.dataDate,
+  });
+
   if ((await sha256Hex(payload)) !== meta.payload.sha256) {
     throw new Error('checksum mismatch — the download may be incomplete or damaged');
   }
 
-  await importRemoteRecord({ meta, payload });
+  await putPayload(meta.id, payload);
+  return payload;
 }

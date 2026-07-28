@@ -37,7 +37,7 @@ const check = (name, ok, detail = '') => {
 const bundle = esbuild.buildSync({
   stdin: {
     contents: `
-      export { runSync } from '@/lib/sync/syncService';
+      export { runSync, ensurePayload } from '@/lib/sync/syncService';
       export * from '@/lib/history-db';
       export { buildGraphRecord, restoreEvalData } from '@/features/daily-evaluation/services/graphRecord';
       export * as db from ${JSON.stringify(FAKE_DB.replace(/\\/g, '/'))};
@@ -244,10 +244,19 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
   check("appears in B's list", bList.length === 1);
   check('same data date', bList[0].dataDate === '2026-06-27');
   check('attributed to User A by the SERVER, not the client', bList[0].engineerName === 'User A');
-  check("stored on B's own computer too", (await B.loadGraphRecord(recA.meta.id)) !== null);
+  // Metadata only: B can list, date and search the graph without having moved
+  // the ~0.84 MB series block. This is what keeps a first sync cheap.
+  check("metadata is on B's computer", (await B.loadGraphMeta(recA.meta.id)) !== null);
+  check('series block NOT downloaded yet', (await B.hasPayload(recA.meta.id)) === false);
+  check('so it is not openable yet', (await B.loadGraphRecord(recA.meta.id)) === null);
+  check("B's index says so", bList[0].payloadCached === false);
 
-  console.log('\n=== 5. B opens it — identical to what A saw ===');
+  console.log('\n=== 5. B opens it — payload arrives on demand, identical to what A saw ===');
+  await B.ensurePayload(tB, await B.loadGraphMeta(recA.meta.id));
+  check('payload now cached on B', (await B.hasPayload(recA.meta.id)) === true);
+
   const bRec = await B.loadGraphRecord(recA.meta.id);
+  check('record is now complete', bRec !== null);
   const bEval = B.restoreEvalData(bRec.meta, bRec.payload);
   check('title/labels preserved',
     bRec.meta.graphConfig.customTitle === 'SNTL600 Daily Check' && bRec.meta.graphConfig.customY2Label === 'SOC (%)');
@@ -338,6 +347,9 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
   try { await tM.putRecord(recM.meta, recM.payload); } catch (err) { refused = /read-only/i.test(err.message); }
   check('a direct publish attempt is refused by the SERVER', refused);
 
+  // A read-only account must still be able to pull payloads on demand —
+  // downloading is a read, and viewing history is the manager's whole product.
+  await M.ensurePayload(tM, await M.loadGraphMeta(recA.meta.id));
   check('manager can open an engineer graph',
     (await M.loadGraphRecord(recA.meta.id)) !== null);
 

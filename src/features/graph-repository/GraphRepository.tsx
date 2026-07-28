@@ -117,9 +117,17 @@ export function GraphRepository({ project }: { project: string }) {
               <Archive size={11} className="text-accent-blue" />
               <b className="text-foreground/90">{stats?.projects ?? 0}</b> projects
             </span>
-            <span className="flex items-center gap-1.5 text-foreground/60">
+            <span
+              className="flex items-center gap-1.5 text-foreground/60"
+              title="Graphs sync as metadata only; the data is downloaded the first time one is opened"
+            >
               <HardDrive size={11} className="text-accent-blue" />
               <b className="text-foreground/90">{formatBytes(stats?.payloadBytes ?? 0)}</b> stored
+              {stats && stats.records > stats.cachedRecords && (
+                <span className="text-foreground/35">
+                  ({stats.cachedRecords}/{stats.records} downloaded)
+                </span>
+              )}
             </span>
             {stats?.oldest && stats?.newest && (
               <span className="text-foreground/45">

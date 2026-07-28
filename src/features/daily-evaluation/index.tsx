@@ -3,7 +3,7 @@ import Plot from 'react-plotly.js';
 // @ts-ignore - distribution bundle avoids node polyfill issues in Vite
 import Plotly from 'plotly.js/dist/plotly.js';
 import type { Config } from 'plotly.js';
-import { Battery, Bot, Copy, Database, Download, Maximize2, Sliders, Upload, X } from 'lucide-react';
+import { Battery, Bot, Copy, Database, Download, Loader2, Maximize2, Sliders, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -36,8 +36,10 @@ import { useGraphAutoSave } from './hooks/useGraphAutoSave';
 import { useGraphConfig } from './hooks/useGraphConfig';
 import { usePinnedPoints } from './hooks/usePinnedPoints';
 import { useExportEvents } from './hooks/useExportEvents';
+import { useHistoricalGraph } from './hooks/useHistoricalGraph';
 import { GraphPanels } from './components/GraphPanels';
 import { CustomizationDrawer } from './components/CustomizationDrawer';
+import { DateSelector } from './components/DateSelector';
 
 
 
@@ -97,6 +99,36 @@ export function DailyEvaluationGraph({
     activeMetric,
     selectedPlant,
   });
+
+  // Stored graphs, browsable by date. Held beside the working set rather than
+  // loaded into it — see useHistoricalGraph for why that distinction matters.
+  const history = useHistoricalGraph(project);
+
+  // The AI Agent and export-preview panes render a supplied snapshot, so date
+  // browsing does not apply there.
+  const historyBrowsable = !isAIAgentMode && !isExportPreviewMode;
+  const historyActive = historyBrowsable && history.isHistory;
+
+  // The single point where history is substituted for the working set. Only the
+  // data and the two settings baked into a record change; figure selection,
+  // pins, customization and export all keep running off existing state.
+  const viewEvalData = historyActive ? history.graph?.evalData ?? null : evalData;
+  const viewGraphConfig = historyActive && history.graph ? history.graph.meta.graphConfig : graphConfig;
+  const viewShowNcc = historyActive && history.graph ? history.graph.meta.view.showNccPCommand : showNccPCommand;
+
+  // Open a stored graph the way its author left it.
+  useEffect(() => {
+    if (!historyActive || !history.graph) return;
+    setActiveMetric(history.graph.meta.view.activeMetric);
+    setSelectedPlant(history.graph.meta.view.selectedPlant);
+    setPinnedPoints(history.graph.meta.pinnedPoints ?? []);
+  }, [historyActive, history.graph?.meta.id]);
+
+  // Generating or importing new data means the engineer wants to see THAT, not
+  // whatever day they were browsing.
+  useEffect(() => {
+    if (evalData && historyActive) history.selectLive();
+  }, [evalData]);
 
   // Push local UI state back into the imported graph snapshot (AI mode)
   useEffect(() => {
@@ -268,20 +300,22 @@ export function DailyEvaluationGraph({
     downloadExcelLogs(evalData, project);
   };
 
+  // Export and clipboard follow whatever is on screen, so a graph exported from
+  // a stored day is identical to one exported the day it was generated.
   const handleCopyClipboard = async () => {
-    if (!evalData || !chartContainerRef.current) return;
-    await copyChartsToClipboard({ container: chartContainerRef.current, evalData, project, activeMetric, graphConfig });
+    if (!viewEvalData || !chartContainerRef.current) return;
+    await copyChartsToClipboard({ container: chartContainerRef.current, evalData: viewEvalData, project, activeMetric, graphConfig: viewGraphConfig });
   };
 
   const handleExportHtml = async () => {
-    await exportSingleGraphHtml({ evalData, project, showNccPCommand, graphConfig, activeMetric, selectedPlant, pinnedPoints });
+    await exportSingleGraphHtml({ evalData: viewEvalData, project, showNccPCommand: viewShowNcc, graphConfig: viewGraphConfig, activeMetric, selectedPlant, pinnedPoints });
   };
 
   const handleExportAllHtml = async () => {
-    await exportAllGraphsHtml({ evalData, project, showNccPCommand, graphConfig, activeMetric, selectedPlant, pinnedPoints });
+    await exportAllGraphsHtml({ evalData: viewEvalData, project, showNccPCommand: viewShowNcc, graphConfig: viewGraphConfig, activeMetric, selectedPlant, pinnedPoints });
   };
 
-  useExportEvents(handleExportHtml, handleExportAllHtml, evalData);
+  useExportEvents(handleExportHtml, handleExportAllHtml, viewEvalData);
 
   // Capture every successfully generated graph into the local repository.
   // Skipped in the AI Agent / export-preview panes: those render a snapshot
@@ -401,6 +435,32 @@ export function DailyEvaluationGraph({
           <div className="font-bold text-[11px] uppercase tracking-wider flex items-center gap-2">
             <Battery size={14} className="text-accent-blue animate-pulse" />
             Daily Evaluation Graph <span className="text-accent-blue opacity-80 pl-1 hidden sm:inline">(Interactive Power & Voltage Analytical Engine)</span>
+          </div>
+
+          {/* Historical browsing. Sits between the title and the actions, and is
+              the only control here that does not act on the working set. */}
+          <div className="flex items-center gap-2">
+            <DateSelector
+              entries={history.entries}
+              selectedId={history.selectedId}
+              onSelect={history.setSelectedId}
+              onSelectLive={history.selectLive}
+              liveDate={evalData?.dataDate ?? null}
+              hasLive={Boolean(evalData)}
+            />
+            {historyActive && (
+              <span className="text-[9px] font-mono text-amber-400/90 flex items-center gap-1">
+                {history.downloading ? (
+                  <><Loader2 size={10} className="animate-spin" /> Downloading graph…</>
+                ) : history.loading ? (
+                  <><Loader2 size={10} className="animate-spin" /> Opening…</>
+                ) : history.error ? (
+                  <span className="text-red-400 max-w-[280px] truncate" title={history.error}>{history.error}</span>
+                ) : (
+                  <>Viewing stored graph — read only</>
+                )}
+              </span>
+            )}
           </div>
 
           <div className="flex gap-2">
@@ -735,13 +795,13 @@ export function DailyEvaluationGraph({
           <div className="flex-1 min-h-0 relative" style={{ display: 'flex', flexDirection: 'row' }}>
             <div ref={chartContainerRef} className="flex-1 relative w-full h-full p-3 min-h-[300px]">
               <GraphPanels
-                evalData={evalData}
-                graphConfig={graphConfig}
+                evalData={viewEvalData}
+                graphConfig={viewGraphConfig}
                 pinnedPoints={pinnedPoints}
                 project={project}
                 selectedPlant={selectedPlant}
                 activeMetric={activeMetric}
-                showNccPCommand={showNccPCommand}
+                showNccPCommand={viewShowNcc}
                 theme={theme}
                 handleHover={handleHover}
                 handleUnhover={handleUnhover}

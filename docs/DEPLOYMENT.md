@@ -209,6 +209,14 @@ uploaded or retained anywhere — only their file *names*, as provenance.
 Together the metadata and payload redraw the graph exactly as the engineer saw
 it.
 
+**Clients sync metadata, not data.** A desktop app pulls the ~1.9 KB metadata
+for every graph in the company, and downloads the ~0.84 MB series block only
+when somebody opens that graph — then keeps it. So a new machine joining a
+repository with two years of history transfers a few megabytes, not gigabytes,
+and R2 egress stays proportional to what people actually look at. In the
+Repository tab a disk icon means stored locally, a cloud icon means it will
+download on open.
+
 Every upload is verified server-side before it is stored: structure, safe
 names, a 32 MB ceiling, and a **SHA-256 recomputed over the bytes that actually
 arrived**. A truncated upload is rejected rather than stored and discovered
@@ -267,6 +275,8 @@ synced.
 | *n waiting to publish* stays stuck | Key revoked, or role changed to viewer | Run Test Connection; check the key is still active |
 | Graph missing on another machine | Not yet synced | Sync runs every 5 min, on window focus, on regaining connectivity, and on demand. Click **Sync Now** |
 | *Payload checksum does not match the metadata* | Upload was truncated in transit | The record is rejected, not stored. It retries on the next pass |
+| *checksum mismatch — the download may be incomplete* when opening a graph | Download was truncated | Nothing is cached; open it again. Persistent failures mean the R2 object is damaged — re-publish from the originating machine |
+| Graph is listed but will not open offline | Its data has never been downloaded on this computer | Expected. Open it once while connected and it stays available offline. The cloud icon in the Repository tab marks these |
 | *Graph repository sync is only available in the desktop application* | Running the dev server in a browser | Expected — network I/O lives in the Electron main process |
 | `/v1/health` reports `"db": false` | Migration never ran, or the binding is wrong | `npm run migrate`; check `database_id` in `wrangler.toml` |
 
@@ -307,7 +317,7 @@ old. Doing it in that order means no downtime.
 
 ```bash
 npm run lint     # types + export-template drift check
-npm test         # 165 checks: codec, history, API, sync, access mode, end-to-end
+npm test         # 200 checks: codec, history, API, sync, access mode, end-to-end
 npm run build    # production renderer bundle
 ```
 

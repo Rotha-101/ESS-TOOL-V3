@@ -43,6 +43,16 @@ export interface GraphHistoryEntry {
   signature?: string;
   /** Set once the sync agent confirms the server accepted it (Phase 3). */
   syncedAt?: string;
+  /**
+   * Whether the ~0.84 MB series block is on this computer yet.
+   *
+   * Sync stores metadata only, so a record can be listed, searched and dated
+   * long before its payload exists locally. It is fetched the first time
+   * someone opens the graph and cached from then on — which is what keeps a
+   * first sync against years of history to a few hundred KB instead of
+   * hundreds of megabytes.
+   */
+  payloadCached?: boolean;
 }
 
 const toEntry = (meta: GraphRecordMeta): GraphHistoryEntry => ({
@@ -157,10 +167,61 @@ export async function saveGraphRecord(
     await setDBItem(`${PAYLOAD_PREFIX}${meta.id}`, record.payload);
     await setDBItem(`${META_PREFIX}${meta.id}`, meta);
 
-    const entry: GraphHistoryEntry = { ...toEntry(meta), signature };
+    const entry: GraphHistoryEntry = { ...toEntry(meta), signature, payloadCached: true };
     await writeIndex([...index, entry]);
     return { status: 'saved', entry };
   });
+}
+
+/**
+ * Store the metadata of a record that exists on the server, without its payload.
+ *
+ * This is what a sync pass writes. The graph is immediately listable, dateable
+ * and searchable; the series block is fetched on first open (see
+ * `ensureGraphRecord`). Metadata is ~1.9 KB against ~0.84 MB, so a sync that
+ * would have moved hundreds of megabytes moves a few hundred kilobytes.
+ *
+ * Like `importRemoteRecord`, the incoming metadata is preserved verbatim: id,
+ * revision and provenance belong to the engineer who generated it.
+ */
+export async function importRemoteMeta(meta: GraphRecordMeta): Promise<GraphHistoryEntry> {
+  return withIndexLock(async () => {
+    const index = await readIndex();
+    const existing = index.find((e) => e.id === meta.id);
+    if (existing) return existing;
+
+    await setDBItem(`${META_PREFIX}${meta.id}`, meta);
+
+    const entry: GraphHistoryEntry = {
+      ...toEntry(meta),
+      syncedAt: new Date().toISOString(),
+      payloadCached: false,
+    };
+    await writeIndex([...index, entry]);
+    return entry;
+  });
+}
+
+/** Cache a payload fetched on demand. Verified by the caller before it gets
+ *  here — nothing unchecked is allowed to become a local record. */
+export async function putPayload(id: string, payload: Uint8Array): Promise<void> {
+  return withIndexLock(async () => {
+    const index = await readIndex();
+    // Payload before index, for the same reason saveGraphRecord does it: a
+    // crash between the two must not leave the list claiming a cached payload
+    // that is not there.
+    await setDBItem(`${PAYLOAD_PREFIX}${id}`, payload);
+    await writeIndex(index.map((e) => (e.id === id ? { ...e, payloadCached: true } : e)));
+  });
+}
+
+export async function loadGraphMeta(id: string): Promise<GraphRecordMeta | null> {
+  return (await getDBItem<GraphRecordMeta>(`${META_PREFIX}${id}`)) ?? null;
+}
+
+/** True when the series block is on this computer, so the graph opens offline. */
+export async function hasPayload(id: string): Promise<boolean> {
+  return Boolean(await getDBItem(`${PAYLOAD_PREFIX}${id}`));
 }
 
 /**
@@ -180,7 +241,11 @@ export async function importRemoteRecord(record: GraphRecord): Promise<GraphHist
     await setDBItem(`${PAYLOAD_PREFIX}${record.meta.id}`, record.payload);
     await setDBItem(`${META_PREFIX}${record.meta.id}`, record.meta);
 
-    const entry: GraphHistoryEntry = { ...toEntry(record.meta), syncedAt: new Date().toISOString() };
+    const entry: GraphHistoryEntry = {
+      ...toEntry(record.meta),
+      syncedAt: new Date().toISOString(),
+      payloadCached: true,
+    };
     await writeIndex([...index, entry]);
     return entry;
   });
@@ -228,7 +293,11 @@ export async function deleteGraphRecord(id: string): Promise<void> {
 export interface HistoryStats {
   records: number;
   projects: number;
+  /** Bytes actually on this disk — cached payloads only. Records synced but not
+   *  yet opened cost ~1.9 KB of metadata and are not counted here. */
   payloadBytes: number;
+  /** How many of `records` can be opened without a network round-trip. */
+  cachedRecords: number;
   oldest?: string;
   newest?: string;
 }
@@ -236,10 +305,12 @@ export interface HistoryStats {
 export async function getHistoryStats(): Promise<HistoryStats> {
   const index = await readIndex();
   const dates = index.map((e) => e.dataDate).filter(Boolean).sort();
+  const cached = index.filter((e) => e.payloadCached !== false);
   return {
     records: index.length,
     projects: new Set(index.map((e) => e.project)).size,
-    payloadBytes: index.reduce((sum, e) => sum + (e.payloadBytes || 0), 0),
+    payloadBytes: cached.reduce((sum, e) => sum + (e.payloadBytes || 0), 0),
+    cachedRecords: cached.length,
     oldest: dates[0],
     newest: dates[dates.length - 1],
   };

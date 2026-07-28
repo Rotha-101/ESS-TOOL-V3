@@ -1,6 +1,6 @@
 export * from './types';
 export { RemoteTransport } from './remoteTransport';
-export { runSync, type SyncResult, type SyncOptions } from './syncService';
+export { runSync, ensurePayload, type SyncResult, type SyncOptions } from './syncService';
 
 import { RemoteTransport } from './remoteTransport';
 import type { SyncTransport } from './types';

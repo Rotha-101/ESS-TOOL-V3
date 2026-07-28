@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { getProjectPlants } from '@/lib/project-utils';
 import { is20PercentProject } from '@/lib/project-detection';
-import { loadGraphRecord } from '@/lib/history-db';
+import { ensureGraphRecord } from './graphAccess';
 import { formatBytes } from '@/features/database/storageInspector';
 import { GraphPanels } from '@/features/daily-evaluation/components/GraphPanels';
 import { usePinnedPoints } from '@/features/daily-evaluation/hooks/usePinnedPoints';
@@ -49,6 +49,9 @@ export function GraphViewer({ id, onBack }: { id: string; onBack: () => void }) 
   const [evalData, setEvalData] = useState<EvalData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  /** Distinguishes "reading from disk" from "fetching over the network", which
+   *  are ~60 ms and ~seconds respectively. */
+  const [downloading, setDownloading] = useState(false);
 
   const [activeMetric, setActiveMetric] = useState<ActiveMetric>('pf_p1');
   const [selectedPlant, setSelectedPlant] = useState<PlantKey>('plant1');
@@ -59,12 +62,16 @@ export function GraphViewer({ id, onBack }: { id: string; onBack: () => void }) 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setDownloading(false);
     setError('');
 
     (async () => {
       try {
-        const record = await loadGraphRecord(id);
-        if (!record) throw new Error('This graph is no longer in the local repository.');
+        // Local first; falls back to fetching the series block from the service
+        // for a graph that has synced but never been opened here.
+        const record = await ensureGraphRecord(id, {
+          onDownloadStart: () => { if (!cancelled) setDownloading(true); },
+        });
 
         // Decoding ~2.5M samples takes ~60 ms measured; fast enough to stay on
         // the main thread here rather than pay for a worker round-trip.
@@ -79,7 +86,7 @@ export function GraphViewer({ id, onBack }: { id: string; onBack: () => void }) 
       } catch (err: any) {
         if (!cancelled) setError(err?.message ?? String(err));
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) { setLoading(false); setDownloading(false); }
       }
     })();
 
@@ -122,7 +129,14 @@ export function GraphViewer({ id, onBack }: { id: string; onBack: () => void }) 
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-foreground/40 font-mono">
         <Loader2 size={28} className="animate-spin text-accent-blue" />
-        <div className="text-[10px] uppercase tracking-widest">Restoring graph…</div>
+        <div className="text-[10px] uppercase tracking-widest">
+          {downloading ? 'Downloading graph data…' : 'Restoring graph…'}
+        </div>
+        {downloading && (
+          <div className="text-[9px] text-foreground/30">
+            First time opening this graph on this computer
+          </div>
+        )}
       </div>
     );
   }

@@ -5,7 +5,7 @@
 // a year of history.
 
 import React from 'react';
-import { Battery, Eye, Trash2, Zap } from 'lucide-react';
+import { Battery, Cloud, Eye, HardDrive, Trash2, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBytes } from '@/features/database/storageInspector';
 import type { GraphHistoryEntry } from '@/lib/history-db';
@@ -102,7 +102,16 @@ export function HistoryList({
                   )}
                 </span>
               </td>
-              <td className="px-3 text-right text-foreground/50 whitespace-nowrap">{formatBytes(e.payloadBytes)}</td>
+              <td className="px-3 text-right text-foreground/50 whitespace-nowrap">
+                <span className="inline-flex items-center gap-1 justify-end">
+                  {e.payloadCached !== false ? (
+                    <HardDrive size={9} className="text-emerald-400/70 shrink-0" aria-label="Stored on this computer" />
+                  ) : (
+                    <Cloud size={9} className="text-blue-400/70 shrink-0" aria-label="Downloads when opened" />
+                  )}
+                  {formatBytes(e.payloadBytes)}
+                </span>
+              </td>
               <td className="px-3">
                 <div className="flex items-center justify-end gap-1">
                   <button

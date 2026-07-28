@@ -159,11 +159,43 @@ timezones.
 1. `GET /v1/graphs/ids`
 2. diff the ids returned against ids already in local history
 3. for genuinely new ids only, fetch the ~1.9 KB metadata
-4. payloads are **not** fetched during sync; they load lazily when a graph is opened
+4. payloads are **not** fetched during sync (see [Lazy payloads](#lazy-payloads))
 
 Returning every id unpaginated is deliberate. At ~40 bytes per row a decade of
 history is a few hundred KB before compression, and it keeps the cursor
 clock-free.
+
+### Lazy payloads
+
+A sync pass moves **metadata only**. The ~0.84 MB series block is fetched by
+`ensurePayload` the first time somebody opens that graph, and cached locally
+from then on.
+
+The difference is the whole cost model. Metadata is ~1.9 KB against ~0.84 MB, so
+a machine catching up on a month of company history moves a few hundred KB
+rather than gigabytes — and almost none of it would have been looked at.
+
+What each state gives you:
+
+| Local state | Listed, dated, searchable | Opens offline |
+|---|---|---|
+| Metadata only (just synced) | yes | no — needs one fetch |
+| Payload cached (opened once) | yes | yes, forever |
+| Generated on this machine | yes | yes, from the moment it was made |
+
+`GraphHistoryEntry.payloadCached` records which, and the repository list and
+date picker both show it — a disk icon for local, a cloud icon for
+downloads-on-open.
+
+Checksum verification moved with the fetch. Sync no longer downloads series
+blocks, so a truncated transfer can only be caught when one is actually pulled;
+`ensurePayload` verifies SHA-256 before caching and caches nothing on failure,
+so a bad transfer simply retries on the next open. `scripts/test-sync.mjs`
+covers exactly this.
+
+An earlier version of this document claimed payloads were already lazy. They
+were not — `downloadRecord` fetched every one during the pass. The claim is now
+true, and the test suite holds it that way.
 
 **Push** — no separate outbox is needed, because Phase 1 already writes every
 generated graph to local history first. Any local record without a `syncedAt`
@@ -206,9 +238,10 @@ Requests time out at 60 s: long enough for a 0.84 MB payload on a poor
 plant-site link, short enough that a black-holed connection cannot hang the
 sync loop indefinitely.
 
-The download loop yields to the event loop between records and caps each pass
-at 50, so a first sync against years of history cannot make the window
-unresponsive; the next pass continues where it left off.
+The receive loop yields to the event loop between records and caps each pass at
+500, so a first sync against years of history cannot make the window
+unresponsive; the next pass continues where it left off. The cap is
+metadata-sized — it was 50 when each record meant an ~0.84 MB download.
 
 ---
 
@@ -289,6 +322,47 @@ It is encrypted with Electron `safeStorage`, which is DPAPI-backed on Windows:
 the ciphertext is bound to the Windows user account, so copying the file to
 another machine or user yields nothing. If decryption fails the key is treated
 as absent and the user is asked for it again.
+
+---
+
+## Browsing history by date
+
+Stored graphs are reachable from two places, and both resolve a record the same
+way — `ensureGraphRecord`: local payload, else fetch and cache, else say which.
+
+- **Graph Repository tab** — the full table: every project, search, filtering,
+  provenance, delete.
+- **Daily Evaluation toolbar** — a date picker for the project in hand, so
+  yesterday's graph is one click from where the engineer already is.
+
+The date picker reads the local index only, which is what makes eager metadata
+sync worth it: every graph the company has ever published is already listed on
+every machine, and opening one is what costs a download.
+
+### Why history does not go through `useEvalData`
+
+`useEvalData` persists to `eval_data_${project}` — the live working set. Loading
+a stored graph through it would overwrite whatever the engineer is working on,
+and `useGraphAutoSave` watches the same value, so it would then re-encode the
+restored dataset as a **new revision of a graph that already exists** (a decoded
+payload has a different sampled signature from the parse it came from).
+
+So `useHistoricalGraph` holds the stored graph beside the working set, and the
+substitution happens at exactly one point — the props handed to `GraphPanels`:
+
+```text
+selectedDate = live  →  GraphPanels(evalData,        graphConfig,        showNccPCommand)
+selectedDate = past  →  GraphPanels(record.evalData, record.graphConfig, record.view.showNccPCommand)
+```
+
+Three props. Figure switching, pins, customization, clipboard and export keep
+running off existing state, because they already act on whatever `GraphPanels`
+was given. Generation, parsing, calculation and plotting are untouched — this is
+the same restore path `GraphViewer` has always used, which is also why a stored
+graph and a fresh one cannot drift apart.
+
+Generating or importing new data returns the view to the working set, on the
+assumption that an engineer who just made a graph wants to see it.
 
 ---
 
@@ -392,12 +466,13 @@ regenerated bit-identically rather than stored. See `CODEC_SPEC.md`.
 | 4 | Role probe, Management read-only experience | ✅ complete |
 | 5 | Tests, docs, deployment guide | ✅ complete |
 | 6 | Online service (Worker + D1 + R2), access keys | ✅ complete |
+| 7 | Lazy payloads, date browsing in Daily Evaluation | ✅ complete |
 
 ## Verification
 
 ```bash
 npm run lint    # types + export-template drift check
-npm test        # 165 checks: codec, history, API, sync, access mode, end-to-end
+npm test        # 200 checks: codec, history, API, sync, access mode, end-to-end
 npm run build   # production renderer bundle
 ```
 
@@ -409,11 +484,11 @@ the code that will be deployed.
 | Suite | Checks | Covers |
 |---|---|---|
 | `test-codec.mjs` | 8 | Round-trip precision, NaN placement, timestamp regeneration, empty-plant dropping |
-| `test-history.mjs` | 16 | Concurrent read-modify-write on the local index from auto-save and sync |
+| `test-history.mjs` | 33 | Concurrent read-modify-write on the local index; metadata-only records, payload caching, size accounting |
 | `test-api.mjs` | 46 | Routing, auth, role enforcement, upload validation, checksum rejection, idempotency, key issue/revoke |
-| `test-sync.mjs` | 35 | Offline, recovery, id-set cursor, read-only never uploads, checksum rejection, partial failure, download cap |
+| `test-sync.mjs` | 48 | Offline, recovery, id-set cursor, **metadata-only pull**, **lazy payload fetch and caching**, read-only never uploads, checksum rejection at open, partial failure, download cap |
 | `test-access.mjs` | 14 | The full read-only decision table |
-| `test-two-machine.mjs` | 46 | End-to-end over HTTP: A plots → B receives it identically; Management receives all, publishes none, refused by the server |
+| `test-two-machine.mjs` | 51 | End-to-end over HTTP: A plots → B receives metadata → B opens → payload arrives and matches identically; Management receives all, publishes none, refused by the server, can still download to read |
 
 ## Related documents
 

@@ -17,7 +17,7 @@ const esbuild = require(path.join(ROOT, 'node_modules/esbuild'));
 const out = esbuild.buildSync({
   stdin: {
     contents:
-      `export { runSync } from '@/lib/sync/syncService';\n` +
+      `export { runSync, ensurePayload } from '@/lib/sync/syncService';\n` +
       `export * as fake from ${JSON.stringify(FAKE_DB.replace(/\\/g, '/'))};\n`,
     resolveDir: ROOT,
     loader: 'js',
@@ -30,7 +30,7 @@ const out = esbuild.buildSync({
   },
 });
 const mod = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
-const { runSync, fake } = mod;
+const { runSync, ensurePayload, fake } = mod;
 
 const enc = new TextEncoder();
 const sha256 = async (bytes) => {
@@ -69,8 +69,11 @@ async function makeRecord(id, project = 'SNTL600', dataDate = '2026-06-02') {
 function makeTransport({ reachable = true, writable = true, remote = [], corruptIds = [], throwOnList = false } = {}) {
   const store = new Map(remote.map(r => [r._fileId ?? r.meta.id, r]));
   const puts = [];
+  // Every payload fetch is recorded, so a test can prove sync did NOT pull the
+  // ~0.84 MB series blocks — the property the lazy design exists for.
+  const payloadFetches = [];
   return {
-    kind: 'fake', puts, store,
+    kind: 'fake', puts, store, payloadFetches,
     async probe() { return { reachable, writable, error: reachable ? null : 'Server unavailable.' }; },
     async listRecordIds() {
       if (throwOnList) throw new Error('listing failed');
@@ -78,6 +81,7 @@ function makeTransport({ reachable = true, writable = true, remote = [], corrupt
     },
     async fetchMeta(ref) { return store.get(ref.id).meta; },
     async fetchPayload(ref) {
+      payloadFetches.push(ref.id);
       const rec = store.get(ref.id);
       // Simulate a truncated download.
       return corruptIds.includes(ref.id) ? rec.payload.slice(0, 5) : rec.payload;
@@ -108,15 +112,30 @@ check('marked as synced', (await fake.listPendingUploads()).length === 0);
 r = await runSync(t2);
 check('second pass does not re-upload', r.uploaded === 0);
 
-console.log('\n=== 3. Downloads new records from the share ===');
+console.log('\n=== 3. Receives new records — METADATA ONLY ===');
 fake.reset();
 const remote = [await makeRecord('r1'), await makeRecord('r2', 'SNTL400', '2026-06-03')];
 const t3 = makeTransport({ remote });
 r = await runSync(t3);
-check('downloaded both', r.downloaded === 2, `downloaded=${r.downloaded}`);
+check('received both', r.downloaded === 2, `downloaded=${r.downloaded}`);
 check('now known locally', (await fake.listKnownIds()).size === 2);
+// The point of the whole lazy design: a sync pass must not move series blocks.
+check('NO payloads fetched during sync', t3.payloadFetches.length === 0, JSON.stringify(t3.payloadFetches));
+check('records are listed but not yet openable', (await fake.loadGraphRecord('r1')) === null);
+check('metadata IS available offline', (await fake.loadGraphMeta('r1'))?.id === 'r1');
 r = await runSync(t3);
 check('re-sync downloads nothing (id-set cursor)', r.downloaded === 0);
+check('re-sync still fetched no payloads', t3.payloadFetches.length === 0);
+
+console.log('\n=== 3b. Opening a graph fetches its payload, once ===');
+const meta1 = await fake.loadGraphMeta('r1');
+const got = await ensurePayload(t3, meta1);
+check('payload returned', got.byteLength === remote[0].payload.byteLength);
+check('exactly one payload fetched', t3.payloadFetches.length === 1, JSON.stringify(t3.payloadFetches));
+check('only the opened record was fetched', t3.payloadFetches[0] === 'r1');
+check('now cached locally', (await fake.hasPayload('r1')) === true);
+check('record is now fully openable', (await fake.loadGraphRecord('r1'))?.payload?.byteLength > 0);
+check('the OTHER record is still payload-free', (await fake.hasPayload('r2')) === false);
 
 console.log('\n=== 4. Read-only share (Management) never attempts uploads ===');
 fake.reset();
@@ -129,15 +148,31 @@ check('no upload attempted', r.uploaded === 0 && t4.puts.length === 0);
 check('record stays pending locally', (await fake.listPendingUploads()).length === 1);
 check('no spurious failures', r.failures.length === 0, JSON.stringify(r.failures));
 
-console.log('\n=== 5. Corrupt/truncated payload is rejected, others still sync ===');
+console.log('\n=== 5. Corrupt/truncated payload is rejected AT OPEN time ===');
+// Checksum verification moved with the payload fetch: sync no longer downloads
+// series blocks, so a truncated transfer can only be detected when one is
+// actually pulled. What must not change is that a corrupt payload never becomes
+// a local record presented as genuine.
 fake.reset();
 const good1 = await makeRecord('good-1'), bad = await makeRecord('bad-1'), good2 = await makeRecord('good-2');
 const t5 = makeTransport({ remote: [good1, bad, good2], corruptIds: ['bad-1'] });
 r = await runSync(t5);
-check('good records downloaded', r.downloaded === 2, `downloaded=${r.downloaded}`);
-check('corrupt record reported', r.failures.length === 1, JSON.stringify(r.failures));
-check('failure mentions checksum', /checksum/i.test(r.failures[0] || ''), r.failures[0]);
-check('corrupt record NOT stored', !(await fake.listKnownIds()).has('bad-1'));
+check('all three received as metadata', r.downloaded === 3, `downloaded=${r.downloaded}`);
+check('sync itself reports no failures', r.failures.length === 0, JSON.stringify(r.failures));
+
+let openError = '';
+try {
+  await ensurePayload(t5, await fake.loadGraphMeta('bad-1'));
+} catch (err) { openError = err.message; }
+check('opening the corrupt record throws', Boolean(openError));
+check('failure mentions checksum', /checksum/i.test(openError), openError);
+check('corrupt payload NOT cached', (await fake.hasPayload('bad-1')) === false);
+check('corrupt record stays unopenable', (await fake.loadGraphRecord('bad-1')) === null);
+
+// A bad neighbour must not poison the good ones.
+await ensurePayload(t5, await fake.loadGraphMeta('good-1'));
+await ensurePayload(t5, await fake.loadGraphMeta('good-2'));
+check('good records still open fine', (await fake.hasPayload('good-1')) && (await fake.hasPayload('good-2')));
 
 console.log('\n=== 5b. Malformed metadata is rejected before it is trusted ===');
 fake.reset();

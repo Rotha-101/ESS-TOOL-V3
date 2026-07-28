@@ -103,6 +103,43 @@ check('imported record is already marked synced',
 check('re-importing the same id is a no-op',
   (await H.importRemoteRecord(rec('remote-x', 'SNTL600', '2026-06-09')), (await H.listGraphHistory()).length) === 1);
 
+console.log('\n=== Metadata-only records, and caching a payload on first open ===');
+H.db._reset();
+const remote = rec('meta-only', 'SNTL600', '2026-06-11', 'sha-mo');
+await H.importRemoteMeta(remote.meta);
+let entry = (await H.listGraphHistory())[0];
+check('listed straight after sync', entry?.id === 'meta-only');
+check('marked as not cached', entry.payloadCached === false);
+check('marked synced (it came from the server)', Boolean(entry.syncedAt));
+check('metadata is readable offline', (await H.loadGraphMeta('meta-only'))?.dataDate === '2026-06-11');
+check('but the record is not loadable yet', (await H.loadGraphRecord('meta-only')) === null);
+check('and has no payload', (await H.hasPayload('meta-only')) === false);
+check('it is NOT queued for upload', (await H.listPendingUploads()).length === 0);
+// Size reporting must reflect the disk, not the catalogue: a synced-but-unopened
+// record costs ~1.9 KB of metadata, not the 0.84 MB its metadata declares.
+let stats = await H.getHistoryStats();
+check('counted as a record', stats.records === 1);
+check('but contributes no stored bytes', stats.payloadBytes === 0, String(stats.payloadBytes));
+check('and is not counted as cached', stats.cachedRecords === 0);
+
+await H.putPayload('meta-only', remote.payload);
+entry = (await H.listGraphHistory())[0];
+check('cached after first open', entry.payloadCached === true);
+check('now fully loadable', (await H.loadGraphRecord('meta-only'))?.payload?.length === 3);
+stats = await H.getHistoryStats();
+check('now counted as stored', stats.payloadBytes === 10 && stats.cachedRecords === 1);
+
+check('re-importing the same id after caching is a no-op',
+  (await H.importRemoteMeta(remote.meta), (await H.listGraphHistory()).length) === 1);
+check('and does NOT discard the cached payload',
+  (await H.loadGraphRecord('meta-only')) !== null);
+
+console.log('\n=== Locally generated graphs are cached by definition ===');
+H.db._reset();
+const mine = await H.saveGraphRecord(rec('mine-1', 'SNTL600', '2026-06-12', 'sha-mine'), 'sig-mine');
+check('own graph is cached immediately', mine.entry.payloadCached === true);
+check('own graph IS queued for upload', (await H.listPendingUploads()).length === 1);
+
 console.log(`\nhistory: ${pass} passed, ${failures.length} failed`);
 failures.forEach((f) => console.log('   - ' + f));
 process.exit(failures.length ? 1 : 0);
