@@ -183,9 +183,22 @@ What each state gives you:
 | Payload cached (opened once) | yes | yes, forever |
 | Generated on this machine | yes | yes, from the moment it was made |
 
-`GraphHistoryEntry.payloadCached` records which, and the repository list and
-date picker both show it — a disk icon for local, a cloud icon for
-downloads-on-open.
+`GraphHistoryEntry.payloadCached` records which, and both the repository list
+and the date picker show it. The picker has a third state, because a download
+is something the user is actively waiting on:
+
+| Indicator | Meaning | Opening it |
+|---|---|---|
+| 💾 disk | Downloaded | Instant, offline, no network call at all |
+| ☁ cloud | In the cloud only | Downloads automatically, then opens |
+| 🔄 spinner | Downloading now | Opens by itself when it lands |
+
+Selecting a cloud-only graph keeps the panel open so the spinner stays beside
+the row it belongs to, and the panel closes itself once the graph is ready. A
+failure keeps it open instead, with the reason attached to that row. Selecting
+an already-downloaded graph closes the panel at once — `ensureGraphRecord`
+returns from disk before it reads the server URL, so there is genuinely nothing
+to wait for.
 
 Checksum verification moved with the fetch. Sync no longer downloads series
 blocks, so a truncated transfer can only be caught when one is actually pulled;

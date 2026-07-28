@@ -10,9 +10,31 @@
 // plotted late on the 27th shows up under the 28th for half the company.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Cloud, HardDrive, Radio, User } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, Cloud, HardDrive, Loader2, Radio, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { GraphHistoryEntry } from '@/lib/history-db';
+
+/** Where a graph's data is right now. Drives the one indicator per row. */
+type Availability = 'local' | 'cloud' | 'syncing';
+
+const availabilityOf = (entry: GraphHistoryEntry, busyId: string | null): Availability =>
+  entry.id === busyId ? 'syncing' : entry.payloadCached === false ? 'cloud' : 'local';
+
+function AvailabilityIcon({ state }: { state: Availability }) {
+  if (state === 'syncing') {
+    return <Loader2 size={9} className="text-amber-400 animate-spin shrink-0" aria-label="Downloading" />;
+  }
+  if (state === 'cloud') {
+    return <Cloud size={9} className="text-blue-400/70 shrink-0" aria-label="In the cloud, downloads when opened" />;
+  }
+  return <HardDrive size={9} className="text-emerald-400/70 shrink-0" aria-label="Downloaded, opens offline" />;
+}
+
+const AVAILABILITY_TITLE: Record<Availability, string> = {
+  local: 'Downloaded — opens instantly, works offline',
+  cloud: 'In the cloud — downloads when you open it',
+  syncing: 'Downloading now — opens automatically when it finishes',
+};
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const ymd = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;
@@ -51,6 +73,10 @@ export interface DateSelectorProps {
   /** Data date of the live working set, if there is one. */
   liveDate?: string | null;
   hasLive: boolean;
+  /** Record currently being opened — downloading, or decoding. */
+  busyId?: string | null;
+  /** Why the last open failed, if it did. */
+  error?: string;
 }
 
 export function DateSelector({
@@ -60,11 +86,20 @@ export function DateSelector({
   onSelectLive,
   liveDate,
   hasLive,
+  busyId = null,
+  error = '',
 }: DateSelectorProps) {
   const [open, setOpen] = useState(false);
   const [pendingDay, setPendingDay] = useState<string | null>(null);
   const [range, setRange] = useState<Range | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // A graph that has to be downloaded keeps the panel open so the spinner stays
+  // next to the row it belongs to; it closes itself once the graph is ready.
+  // Refs, not state: this only needs to be consulted when busyId changes, and
+  // re-rendering on it would just cause flicker.
+  const awaiting = useRef<string | null>(null);
+  const startedLoading = useRef(false);
 
   const selected = useMemo(
     () => entries.find((e) => e.id === selectedId) ?? null,
@@ -79,13 +114,30 @@ export function DateSelector({
     return { y, m };
   });
 
+  // Reset only on the closed → open transition. Keying this on `anchor` too
+  // would wipe the visible list the moment a selection changed it — which is
+  // exactly while a download the user is watching is still in flight.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (!open) return;
-    const [y, m] = anchor.split('-').map(Number);
-    setView({ y, m });
-    setPendingDay(null);
-    setRange(null);
+    if (open && !wasOpen.current) {
+      const [y, m] = anchor.split('-').map(Number);
+      setView({ y, m });
+      setPendingDay(null);
+      setRange(null);
+    }
+    wasOpen.current = open;
   }, [open, anchor]);
+
+  // Close once the awaited graph is ready. A failure keeps the panel up so the
+  // reason is attached to the row that caused it.
+  useEffect(() => {
+    if (!awaiting.current) return;
+    if (busyId === awaiting.current) { startedLoading.current = true; return; }
+    if (!startedLoading.current) return; // the load has not begun yet
+    awaiting.current = null;
+    startedLoading.current = false;
+    if (!error) setOpen(false);
+  }, [busyId, error]);
 
   // Close on outside click / Escape. Without this the panel survives clicking
   // straight into the graph, which reads as the app being stuck.
@@ -143,15 +195,33 @@ export function DateSelector({
     });
   };
 
+  /**
+   * Open a record.
+   *
+   * Already downloaded → close immediately; `ensureGraphRecord` reads it from
+   * disk without touching the network, so there is nothing to wait for.
+   * Cloud-only → leave the panel up, let the row spin, and close when the
+   * download lands (see the effect above).
+   */
+  const openEntry = (entry: GraphHistoryEntry) => {
+    onSelect(entry.id);
+    if (entry.payloadCached === false) {
+      awaiting.current = entry.id;
+      startedLoading.current = false;
+    } else {
+      awaiting.current = null;
+      setOpen(false);
+    }
+  };
+
   const chooseDay = (day: string) => {
     setRange(null);
     const records = byDate.get(day) ?? [];
     // One graph is the overwhelmingly common case — open it without making the
     // user confirm a list of one.
     if (records.length === 1) {
-      onSelect(records[0].id);
-      setOpen(false);
-      setPendingDay(null);
+      setPendingDay(day);
+      openEntry(records[0]);
       return;
     }
     setPendingDay(day);
@@ -184,9 +254,13 @@ export function DateSelector({
             : 'bg-surface text-foreground/80 border-border-v hover:bg-foreground/5',
         )}
       >
-        <Calendar size={11} className={selected ? 'text-amber-400' : 'text-accent-blue'} />
+        {busyId ? (
+          <Loader2 size={11} className="animate-spin text-amber-400" />
+        ) : (
+          <Calendar size={11} className={selected ? 'text-amber-400' : 'text-accent-blue'} />
+        )}
         <span>{label}</span>
-        {selected && <span className="text-[8px] opacity-70 uppercase">history</span>}
+        {selected && !busyId && <span className="text-[8px] opacity-70 uppercase">history</span>}
         <ChevronDown size={11} className="opacity-50" />
       </button>
 
@@ -297,9 +371,10 @@ export function DateSelector({
                   {offered.map((e) => (
                     <button
                       key={e.id}
-                      onClick={() => { onSelect(e.id); setOpen(false); }}
+                      onClick={() => openEntry(e)}
+                      disabled={e.id === busyId}
                       className={cn(
-                        'w-full px-2 py-1.5 text-left hover:bg-accent-blue/10 border-t border-border-v/50 flex items-center gap-2',
+                        'w-full px-2 py-1.5 text-left hover:bg-accent-blue/10 border-t border-border-v/50 flex items-center gap-2 disabled:cursor-wait',
                         e.id === selectedId && 'bg-accent-blue/15',
                       )}
                     >
@@ -312,14 +387,20 @@ export function DateSelector({
                       <span className="flex items-center gap-1 text-[8px] font-mono text-foreground/50 truncate">
                         <User size={8} /> {e.engineerName}
                       </span>
-                      <span
-                        className="ml-auto shrink-0"
-                        title={e.payloadCached !== false ? 'Stored on this computer' : 'Downloads when opened'}
-                      >
-                        {e.payloadCached !== false
-                          ? <HardDrive size={9} className="text-emerald-400/70" />
-                          : <Cloud size={9} className="text-blue-400/70" />}
-                      </span>
+                      {(() => {
+                        const state = availabilityOf(e, busyId);
+                        return (
+                          <span
+                            className="ml-auto shrink-0 flex items-center gap-1"
+                            title={AVAILABILITY_TITLE[state]}
+                          >
+                            {state === 'syncing' && (
+                              <span className="text-[8px] font-mono text-amber-400">downloading…</span>
+                            )}
+                            <AvailabilityIcon state={state} />
+                          </span>
+                        );
+                      })()}
                     </button>
                   ))}
                 </>
@@ -337,8 +418,19 @@ export function DateSelector({
             </button>
           )}
 
-          <div className="px-2 py-1.5 border-t border-border-v text-[8px] font-mono text-foreground/30 text-center">
-            Graphs sync automatically. Data downloads when opened.
+          {/* A failed open keeps the panel up, so the reason sits next to the
+              row that produced it rather than only in the toolbar. */}
+          {error && (
+            <div className="px-2 py-1.5 border-t border-red-500/30 bg-red-500/10 flex items-start gap-1.5">
+              <AlertTriangle size={10} className="text-red-400 mt-0.5 shrink-0" />
+              <span className="text-[8px] font-mono text-red-400 leading-relaxed">{error}</span>
+            </div>
+          )}
+
+          <div className="px-2 py-1.5 border-t border-border-v flex items-center justify-center gap-2.5 text-[8px] font-mono text-foreground/30">
+            <span className="flex items-center gap-1"><HardDrive size={8} className="text-emerald-400/70" /> offline</span>
+            <span className="flex items-center gap-1"><Cloud size={8} className="text-blue-400/70" /> in cloud</span>
+            <span className="flex items-center gap-1"><Loader2 size={8} className="text-amber-400" /> downloading</span>
           </div>
         </div>
       )}

@@ -296,8 +296,11 @@ export function DailyEvaluationGraph({
 
   // Export processed data as a real Excel file matching MATLAB logs
   const handleDownloadExcelLogs = () => {
-    if (!evalData) return;
-    downloadExcelLogs(evalData, project);
+    // Follows the display too: a restored record carries every series this
+    // needs, so exporting logs from a stored day works the same as from a
+    // fresh one.
+    if (!viewEvalData) return;
+    downloadExcelLogs(viewEvalData, project);
   };
 
   // Export and clipboard follow whatever is on screen, so a graph exported from
@@ -447,6 +450,8 @@ export function DailyEvaluationGraph({
               onSelectLive={history.selectLive}
               liveDate={evalData?.dataDate ?? null}
               hasLive={Boolean(evalData)}
+              busyId={history.loading ? history.selectedId : null}
+              error={history.error}
             />
             {historyActive && (
               <span className="text-[9px] font-mono text-amber-400/90 flex items-center gap-1">
@@ -464,14 +469,17 @@ export function DailyEvaluationGraph({
           </div>
 
           <div className="flex gap-2">
-            {evalData && onNavigateToAI && (
+            {viewEvalData && onNavigateToAI && (
               <Button
                 onClick={() => {
+                  // Hand over what is on screen. Sending the live working set
+                  // while a stored graph is displayed would have the AI tab
+                  // analysing a different day from the one being looked at.
                   setImportedGraph({
-                    evalData,
+                    evalData: viewEvalData,
                     activeMetric,
                     selectedPlant,
-                    graphConfig,
+                    graphConfig: viewGraphConfig,
                     pinnedPoints,
                     project
                   });
@@ -774,7 +782,7 @@ export function DailyEvaluationGraph({
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleCopyClipboard}
-                  disabled={!evalData}
+                  disabled={!viewEvalData}
                   className="h-6 px-2 text-[9px] rounded transition-colors flex items-center gap-1 font-bold font-mono bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 disabled:pointer-events-none shadow-sm"
                   title="Capture all subplots as a single 1920×1080 image and copy to clipboard"
                 >
