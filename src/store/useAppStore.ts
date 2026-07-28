@@ -211,7 +211,9 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      activeTab: 'dashboard',
+      // First launch lands on Home. A returning user's persisted activeTab
+      // overrides this, so experienced people are not moved.
+      activeTab: 'home',
       setActiveTab: (tab) => set({ activeTab: tab, activePreview: null }),
       
       activePreview: null,

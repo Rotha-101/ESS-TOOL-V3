@@ -72,6 +72,7 @@ import { useAppearance } from './hooks/useAppearance';
 import { AppHeader } from './components/shell/AppHeader';
 import { AppSidebar } from './components/shell/AppSidebar';
 import { resolveInitialTab } from './config/navigation';
+import { HomeWorkspace } from './features/home';
 
 export { DailyEvaluationGraph } from './features/daily-evaluation';
 
@@ -113,6 +114,18 @@ export default function App() {
   useEffect(() => {
     if (readOnly && activeTab !== 'graph_repository') setActiveTab('graph_repository');
   }, [readOnly, activeTab, setActiveTab]);
+
+  // Where to open, once, on mount. First launch lands on Home so a new user is
+  // guided; a returning user gets whatever they had open. A saved tab from an
+  // older build — or one that no longer exists — used to render nothing at all,
+  // silently, with no way back except clearing storage.
+  const landingResolved = useRef(false);
+  useEffect(() => {
+    if (landingResolved.current) return;
+    landingResolved.current = true;
+    const target = resolveInitialTab(activeTab, readOnly);
+    if (target !== activeTab) setActiveTab(target);
+  }, [activeTab, readOnly, setActiveTab]);
 
   const [alertData, setAlertData] = useState<{ title: string, message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isExportingMat, setIsExportingMat] = useState(false);
@@ -608,8 +621,13 @@ export default function App() {
             />
           ) : (
             <>
-              {/* KPI Cards */}
-              {activeTab !== 'smart_report' && activeTab !== 'export' && activeTab !== 'soc' && activeTab !== 'ai' && activeTab !== 'jscript' && activeTab !== 'usable_capacity' && activeTab !== 'telegram_ncc' && activeTab !== 'database' && (() => {
+              {/* File/validation status cards.
+                  This was a growing blacklist, so every new screen inherited
+                  the strip by default — which is how Home ended up with plant
+                  counters and byte totals on it. Now a whitelist: a new tab
+                  gets these only if it asks. Membership is unchanged for every
+                  screen that had them before. */}
+              {['dashboard', 'signal', 'power', 'graph_repository'].includes(activeTab) && (() => {
                 const isBessProject = is20PercentProject(project);
                 return (
                   <section className={`grid ${getProjectPlants(project).length === 2 ? 'grid-cols-5' : (getProjectPlants(project).length === 1 ? 'grid-cols-4' : 'grid-cols-6')} gap-4 shrink-0`}>
@@ -911,6 +929,12 @@ export default function App() {
                   );
                 })()
 
+              ) : activeTab === 'home' ? (
+                <HomeWorkspace
+                  project={project}
+                  onNavigate={switchTab}
+                  onOpenGraph={() => switchTab('graph_repository')}
+                />
               ) : activeTab === 'telegram_ncc' ? (
                 <TelegramNcc />
               ) : activeTab === 'database' ? (
