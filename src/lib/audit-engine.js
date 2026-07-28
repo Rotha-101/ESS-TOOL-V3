@@ -948,15 +948,10 @@ const HC_PROJECTS = [
   ]},
 ];
 const hcByProject = {};   // projectId -> [plant, plant, ...]
-let hcActiveProject = (() => {
-  if (typeof localStorage !== 'undefined') {
-    const saved = localStorage.getItem('hcActiveProject');
-    if (saved && HC_PROJECTS.some(p => p.id === saved)) {
-      return saved;
-    }
-  }
-  return HC_PROJECTS[0].id;
-})();
+// Mirror of the store's value. Seeded with a safe default; the store pushes
+// the real one via syncActiveProject() as soon as it has rehydrated. This used
+// to read its own localStorage key, which was the second source of truth.
+let hcActiveProject = HC_PROJECTS[0].id;
 let hcPlantSeq = 0;
 
 function hcMakePlant(name, expected) {
@@ -1020,7 +1015,16 @@ function hcInitProjects() {
 }
 
 function hcRenderProjectTabs() {
+  // Pre-React DOM UI. #hc-project-tabs does not exist in the application, so
+  // this returns before the click handler below — which assigns hcActiveProject
+  // directly — can ever be attached. That assignment would be a second writer
+  // for a value the store now owns.
+  //
+  // Guarded rather than deleted: the surrounding renderer is legacy code with
+  // several callers, and an early return is the smaller, safer change. Without
+  // it this also threw on `wrap.innerHTML` whenever it was reached.
   const wrap = $('hc-project-tabs');
+  if (!wrap) return;
   wrap.innerHTML = '';
   for (const proj of HC_PROJECTS) {
     const total = (hcByProject[proj.id] || []).reduce(
@@ -2248,12 +2252,36 @@ var reactUpdateCb = null;
 export function setReactUpdateCb(cb) { reactUpdateCb = cb; }
 
 export function getHcActiveProject() { return hcActiveProject; }
-export function setHcActiveProject(val) {
+/**
+ * Push the active project into this module.
+ *
+ * The store owns this value; what lives here is a mirror, kept in step so the
+ * ~20 internal read sites below need no change. It used to be the other way
+ * round -- this module owned it and persisted it to its own localStorage key,
+ * while the store held a second, unused copy of the same idea. Two persisted
+ * homes for one fact is a divergence waiting to happen, and every future
+ * administrator feature needs one answer to "which project?".
+ *
+ * Call this only from the store. Everything else goes through
+ * useAppStore().setHcActiveProject.
+ */
+export function syncActiveProject(val) {
+  if (!val || val === hcActiveProject) return;
   hcActiveProject = val;
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('hcActiveProject', val);
-  }
-  if(reactUpdateCb) reactUpdateCb('plants');
+  if (reactUpdateCb) reactUpdateCb('plants');
+}
+
+let _storeSetter = null;
+
+/** Wired once by the store, mirroring the connectServerConfig pattern so this
+ *  module stays free of a React or store import. */
+export function connectProjectStore(setter) { _storeSetter = setter; }
+
+/** @deprecated Use useAppStore().setHcActiveProject -- the store is the owner.
+ *  Kept so any straggling call site still routes to the single writer. */
+export function setHcActiveProject(val) {
+  if (_storeSetter) _storeSetter(val);
+  else syncActiveProject(val);
 }
 
 export function getHcBusy() { return typeof hcBusy !== 'undefined' ? hcBusy : false; }

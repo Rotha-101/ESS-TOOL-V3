@@ -56,9 +56,7 @@ import {
   hcInitProjectsAsync,
   HC_PROJECTS,
   hcRunExport, hcRunExportMat,
-  setHcActiveProject,
   setReactUpdateCb,
-  getHcActiveProject,
   getHcBusy,
 } from './lib/audit-engine.js';
 import { exportAllGraphsToZip } from './lib/exportGraphs';
@@ -150,7 +148,11 @@ export default function App() {
     evalDataPreview, setEvalDataPreview
   } = useAppStore();
 
-  const project = getHcActiveProject() || 'SNTL1000';
+  // Read from the store, which owns this. audit-engine keeps a mirror for its
+  // own internal reads, but React must not be one of them — two sources for
+  // one fact is what this change removed.
+  const project = useAppStore((s) => s.hcActiveProject) || HC_PROJECTS[0].id;
+  const setProject = useAppStore((s) => s.setHcActiveProject);
   const { messages } = useAIContext();
 
   // Sole owner of the sync loop. Mounted here rather than in the
@@ -658,7 +660,7 @@ export default function App() {
       <AppHeader
         project={project}
         projects={HC_PROJECTS.map((p) => ({ id: p.id, label: p.label }))}
-        onProjectChange={setHcActiveProject}
+        onProjectChange={setProject}
       />
 
       <div className="flex flex-1 overflow-hidden">

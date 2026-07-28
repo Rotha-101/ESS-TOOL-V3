@@ -5,6 +5,7 @@ import type { EvalData } from '../types/eval-data';
 import type { EmsRecord, FilterState } from '../features/telegram-ncc/types';
 import { INITIAL_FILTERS } from '../features/telegram-ncc/constants';
 import { connectServerConfig } from '../lib/config/serverConfig';
+import { connectProjectStore, syncActiveProject } from '../lib/audit-engine.js';
 
 /** Live sync status. Session-only — it describes right now, not a preference. */
 export interface SyncState {
@@ -319,7 +320,15 @@ export const useAppStore = create<AppState>()(
       setAiEnableWebSearch: (val) => set({ aiEnableWebSearch: val }),
 
       hcActiveProject: null,
-      setHcActiveProject: (proj) => set({ hcActiveProject: proj }),
+      // The single writer for the active project. Also pushes the value into
+      // audit-engine, which keeps a mirror for its ~20 internal read sites.
+      // Before this, audit-engine owned the value and persisted it to its own
+      // localStorage key while this field sat unused — two persisted homes for
+      // one fact, and every administrator feature will need one answer.
+      setHcActiveProject: (proj) => {
+        set({ hcActiveProject: proj });
+        if (proj) syncActiveProject(proj);
+      },
 
       engineerName: '',
       setEngineerName: (name) => set({ engineerName: name }),
@@ -401,3 +410,31 @@ export const useAppStore = create<AppState>()(
 // it has to be callable from plain functions outside React (background sync
 // passes, the Electron bridge), and a hook dependency would prevent that.
 connectServerConfig(() => useAppStore.getState().serverUrl);
+
+// Route any straggling audit-engine caller through the store, so there is
+// exactly one writer for the active project.
+connectProjectStore((proj: string) => useAppStore.getState().setHcActiveProject(proj));
+
+// Establish the active project once, at startup.
+//
+// Migration: earlier builds persisted this under audit-engine's own
+// `hcActiveProject` localStorage key. Adopt it if the store has no value yet,
+// so an existing user's selection survives the change, then let the store's
+// own persistence own it from here.
+(() => {
+  const state = useAppStore.getState();
+  let project = state.hcActiveProject;
+
+  if (!project && typeof localStorage !== 'undefined') {
+    const legacy = localStorage.getItem('hcActiveProject');
+    if (legacy) {
+      project = legacy;
+      localStorage.removeItem('hcActiveProject');
+    }
+  }
+
+  // Push whatever we settled on into audit-engine's mirror. Without this, a
+  // returning user's stored project would be ignored until they touched the
+  // picker, because the mirror starts at a default.
+  if (project) state.setHcActiveProject(project);
+})();
