@@ -69,6 +69,9 @@ import { DatabaseTab } from './features/database';
 import { SettingsWindow } from './components/SettingsWindow';
 import { GlobalProgressModal } from './components/GlobalProgressModal';
 import { useAppearance } from './hooks/useAppearance';
+import { AppHeader } from './components/shell/AppHeader';
+import { AppSidebar } from './components/shell/AppSidebar';
+import { resolveInitialTab } from './config/navigation';
 
 export { DailyEvaluationGraph } from './features/daily-evaluation';
 
@@ -103,6 +106,9 @@ export default function App() {
   // data, none of which they can do, so the repository is the whole product for
   // them. Same .exe, same components; only the nav is filtered.
   const readOnly = useIsReadOnly();
+  // Server-owned role. Only the admin group reads it today; keeping it here
+  // means Stage 3 adds a nav entry rather than new plumbing.
+  const syncRole = useAppStore((s) => s.syncState.role);
 
   useEffect(() => {
     if (readOnly && activeTab !== 'graph_repository') setActiveTab('graph_repository');
@@ -575,86 +581,21 @@ export default function App() {
         </div>
       )}
 
-      <header className="h-12 border-b border-border-v flex items-center justify-between px-4 shrink-0" style={{ background: '#000000' }}>
-        <div className="flex items-center gap-3">
-          <img src="./SNT.png" alt="SNT Logo" className="h-4 object-contain" style={{ mixBlendMode: 'screen' }} />
-          <div className="h-4 w-px bg-white/20"></div>
-          <h1 className="font-bold tracking-tight text-sm text-white flex items-center">
-            <span>Data Visualization Tool</span>
-            <span className="font-normal text-[9px] tracking-widest text-white/40 ml-3 pl-3 border-l border-white/20">DEVELOPED BY PERFORMANCE AND ANALYSIS OFFICE</span>
-          </h1>
-        </div>
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="text-white/40 uppercase">Project:</span>
-            <Select value={project} onValueChange={setHcActiveProject}>
-              <SelectTrigger className="h-6 text-[11px] font-bold text-accent-blue bg-blue-500/10 border-0 rounded px-2 w-[160px] focus:ring-0 focus:ring-offset-0">
-                <SelectValue placeholder="Select Project" />
-              </SelectTrigger>
-              <SelectContent>
-                {HC_PROJECTS.map(p => (
-                  <SelectItem key={p.id} value={p.id} className="text-[11px] font-bold">{p.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {readOnly && (
-            <span
-              className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded bg-blue-500/15 text-blue-300 border border-blue-400/30"
-              title="Your account has read-only access to the company repository. Viewing and exporting are available; importing and publishing are not."
-            >
-              <Eye size={11} /> VIEW ONLY
-            </span>
-          )}
-          <div className="flex items-center gap-2 text-[11px] text-white">
-            <span className="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
-            <HeaderClock />
-          </div>
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white/70 hover:text-white transition-colors ml-2"
-            title="Toggle theme"
-          >
-            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
-          <div className="h-8 px-3 rounded bg-[#FFD700] flex items-center justify-center text-[10px] font-bold tracking-wider text-black shadow-sm">
-            ESS DIVISION
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        project={project}
+        projects={HC_PROJECTS.map((p) => ({ id: p.id, label: p.label }))}
+        onProjectChange={setHcActiveProject}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <nav className="w-48 bg-panel border-r border-border-v flex flex-col shrink-0 justify-between">
-          <div>
-            <div className="p-3 text-[10px] uppercase tracking-widest text-foreground/30 font-bold">Main Modules</div>
-            <div className="flex flex-col">
-              <NavItem icon={<Archive size={14} />} label="Graph Repository" active={activeTab === 'graph_repository'} onClick={() => switchTab('graph_repository')} />
-              {!readOnly && (
-                <>
-                  <NavItem icon={<Grid2X2 size={14} />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => switchTab('dashboard')} />
-                  <NavItem icon={<Activity size={14} />} label="Validation File Debug" active={activeTab === 'signal'} onClick={() => switchTab('signal')} />
-                  <NavItem icon={<Zap size={14} />} label="Cycle Calculation" active={activeTab === 'power'} onClick={() => switchTab('power')} />
-                  <NavItem icon={<Battery size={14} />} label="Daily Evaluation Graph" active={activeTab === 'soc'} onClick={() => switchTab('soc')} />
-                  <NavItem icon={<Download size={14} />} label="Report Export" active={activeTab === 'export'} onClick={() => switchTab('export')} />
-                  <NavItem icon={<Gauge size={14} />} label="Usable Capacity" active={activeTab === 'usable_capacity'} onClick={() => switchTab('usable_capacity')} />
-                  <NavItem icon={<Send size={14} />} label="Telegram NCC Data" active={activeTab === 'telegram_ncc'} onClick={() => switchTab('telegram_ncc')} />
-                  <NavItem icon={<Bot size={14} />} label="AI Agent" active={activeTab === 'ai'} onClick={() => switchTab('ai')} />
-                  <NavItem icon={<Database size={14} />} label="Database" active={activeTab === 'database'} onClick={() => switchTab('database')} />
-                </>
-              )}
-            </div>
-          </div>
-          <div className="p-2 border-t border-border-v">
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="w-full flex items-center gap-3 px-2 py-2 text-left transition-colors font-medium text-[11px] outline-none hover:bg-foreground/5 text-foreground/60 hover:text-foreground rounded-sm"
-            >
-              <span className="flex items-center justify-center opacity-70"><Settings size={14} /></span>
-              Settings
-            </button>
-          </div>
-        </nav>
+        <AppSidebar
+          activeTab={activeTab}
+          onNavigate={switchTab}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          readOnly={readOnly}
+          role={syncRole}
+        />
 
         {/* Main Content */}
         <main className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
