@@ -11,7 +11,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { createFakeD1 } from './fixtures/fake-d1.mjs';
-import { createFakeR2 } from './fixtures/fake-r2.mjs';
+import { createFakeKV } from './fixtures/fake-kv.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -33,7 +33,7 @@ const worker = (
 ).default;
 
 const schema = fs.readFileSync(path.join(SERVER, 'migrations/0001_init.sql'), 'utf8');
-const env = { DB: createFakeD1(schema), BUCKET: createFakeR2() };
+const env = { DB: createFakeD1(schema), PAYLOADS: createFakeKV() };
 
 let pass = 0;
 const failures = [];
@@ -130,7 +130,7 @@ check('reports written', (await res.json()).status === 'written');
 res = await call('POST', '/v1/graphs', { key: engineerKey, body: publishForm(meta, payload) });
 const dup = await res.json();
 check('re-publish is idempotent', res.status === 200 && dup.status === 'exists');
-check('no duplicate object in storage', env.BUCKET._size() === 1, String(env.BUCKET._size()));
+check('no duplicate object in storage', env.PAYLOADS._size() === 1, String(env.PAYLOADS._size()));
 
 console.log('\n=== 4. Attribution cannot be spoofed ===');
 res = await call('GET', '/v1/graphs/gA1', { key: viewerKey });
@@ -181,7 +181,7 @@ check('missing generatedAt -> 400', res.status === 400);
 res = await call('POST', '/v1/graphs', { key: engineerKey, body: 'not-multipart', headers: { 'content-type': 'text/plain' } });
 check('non-multipart body -> 400', res.status === 400);
 
-check('nothing bad reached storage', env.BUCKET._size() === 1, String(env.BUCKET._size()));
+check('nothing bad reached storage', env.PAYLOADS._size() === 1, String(env.PAYLOADS._size()));
 
 console.log('\n=== 7. Admin key management ===');
 res = await call('POST', '/v1/admin/keys', {

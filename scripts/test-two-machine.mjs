@@ -14,7 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createFakeD1 } from './fixtures/fake-d1.mjs';
-import { createFakeR2 } from './fixtures/fake-r2.mjs';
+import { createFakeKV } from './fixtures/fake-kv.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -76,7 +76,7 @@ const worker = (
 
 const env = {
   DB: createFakeD1(fs.readFileSync(path.join(SERVER, 'migrations/0001_init.sql'), 'utf8')),
-  BUCKET: createFakeR2(),
+  PAYLOADS: createFakeKV(),
 };
 const BASE = 'https://graphs.example.com';
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
@@ -233,12 +233,12 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
   check('one record in the database', stored.results.length === 1);
   check('indexed by project and date',
     stored.results[0].project === 'SNTL600' && stored.results[0].data_date === '2026-06-27');
-  check('one object in storage', env.BUCKET._size() === 1);
+  check('one object in storage', env.PAYLOADS._size() === 1);
   check('object key is project/date scoped',
-    env.BUCKET._keys()[0] === 'graphs/SNTL600/2026-06-27/' + recA.meta.id + '.essg.gz',
-    env.BUCKET._keys()[0]);
+    env.PAYLOADS._keys()[0] === 'graphs/SNTL600/2026-06-27/' + recA.meta.id + '.essg.gz',
+    env.PAYLOADS._keys()[0]);
   check('raw spreadsheets NOT uploaded',
-    !env.BUCKET._keys().some((k) => /\.xlsx?$/i.test(k)));
+    !env.PAYLOADS._keys().some((k) => /\.xlsx?$/i.test(k)));
 
   console.log("\n=== 4. User B syncs -> the graph appears on B's computer ===");
   check("B's history empty before syncing", (await B.listGraphHistory()).length === 0);

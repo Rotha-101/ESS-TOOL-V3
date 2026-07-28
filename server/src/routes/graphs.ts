@@ -17,8 +17,10 @@ import {
 } from '../lib/http';
 
 /** Generous next to a measured 0.84 MB, but bounded so a bad client cannot
- *  push arbitrary data into the bucket. */
-const MAX_PAYLOAD_BYTES = 32 * 1024 * 1024;
+ *  push arbitrary data into storage. Capped at KV's own 25 MiB value limit —
+ *  above this the write fails at the platform rather than here, with a much
+ *  worse message. */
+const MAX_PAYLOAD_BYTES = 25 * 1024 * 1024;
 
 const payloadKey = (project: string, dataDate: string, id: string) =>
   `graphs/${project}/${dataDate}/${id}.essg.gz`;
@@ -64,10 +66,18 @@ export async function getPayload(env: Env, id: string): Promise<Response> {
 
   if (!row) return notFound('No graph with that id.');
 
-  const object = await env.BUCKET.get(row.payload_key);
-  if (!object) return serverError('The stored graph data is missing from object storage.');
+  // KV is eventually consistent, so a graph published seconds ago in another
+  // region can be listed (D1 is strongly consistent) before its payload is
+  // readable here. Say so plainly: the client retries on the next open, and
+  // "not replicated yet" is a very different problem from "data lost".
+  const object = await env.PAYLOADS.get(row.payload_key, 'stream');
+  if (!object) {
+    return serverError(
+      'The graph data is not available yet — it may still be replicating. Try again in a minute.',
+    );
+  }
 
-  return new Response(object.body, {
+  return new Response(object, {
     headers: {
       'content-type': 'application/octet-stream',
       'content-length': String(row.payload_bytes),
@@ -156,9 +166,7 @@ export async function publish(request: Request, env: Env, identity: Identity): P
   };
 
   const key = payloadKey(meta.project, meta.dataDate, meta.id);
-  await env.BUCKET.put(key, bytes, {
-    httpMetadata: { contentType: 'application/octet-stream' },
-  });
+  await env.PAYLOADS.put(key, bytes);
 
   try {
     await env.DB.prepare(
@@ -188,9 +196,9 @@ export async function publish(request: Request, env: Env, identity: Identity): P
       )
       .run();
   } catch (err: any) {
-    // Metadata is the record of truth; an orphaned object would be listed by
+    // Metadata is the record of truth; an orphaned value would be listed by
     // nothing and served to no one, so remove it rather than leave litter.
-    await env.BUCKET.delete(key).catch(() => undefined);
+    await env.PAYLOADS.delete(key).catch(() => undefined);
     return serverError(`Could not record the graph: ${err?.message ?? String(err)}`);
   }
 

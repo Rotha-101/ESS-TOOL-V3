@@ -11,7 +11,7 @@
     "make-key": "node scripts/make-key.mjs"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260101.0",
+    "@cloudflare/workers-types": "^5.20260722.1",
     "typescript": "~5.8.2",
     "wrangler": "^4.0.0"
   }

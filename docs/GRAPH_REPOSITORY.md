@@ -75,7 +75,7 @@ yesterday's: there was no history to share, locally or otherwise.
         ┌───────────────────────────────────────────────────────┐
         │  Cloudflare Worker — /v1                              │
         │    D1 (SQLite)  metadata, listed on every sync        │
-        │    R2           gzipped payloads, no egress charge    │
+        │    KV           gzipped payloads, 25 MiB max value    │
         │    access keys ARE the role model                     │
         └───────────────────────────────────────────────────────┘
 ```
@@ -90,7 +90,7 @@ bindings.
 |---|---|
 | Worker, not a VM | Nothing to patch, nothing to keep running; the load is ~10 uploads/day |
 | D1 for metadata | Sync lists metadata constantly; SQLite indexes it and costs nothing at this size |
-| R2 for payloads | 0.84 MB each, fetched rarely, and **R2 charges no egress** — clients re-download freely |
+| KV for payloads | 0.84 MB each, fetched rarely; free without a payment method, unlike R2 |
 | Access keys, not OAuth | No identity provider exists to federate with; a key is one paste into Settings |
 | Records immutable | A generated graph never changes, so there is no update path, no locking and no conflict resolution |
 
@@ -128,7 +128,7 @@ would then be handed bytes it cannot read.
 D1   graphs        one row per record, including the full meta_json as sent
      access_keys   id, key_hash, user_name, role, created_at, last_used_at, revoked_at
 
-R2   graphs/<project>/<dataDate>/<id>.essg.gz     ~0.84 MB
+KV   graphs/<project>/<dataDate>/<id>.essg.gz     ~0.84 MB
 ```
 
 `meta_json` is stored whole so a client receives exactly the shape it stores
@@ -139,7 +139,7 @@ locally, rather than a reassembly that could drift from it.
 Every upload is checked before anything is stored:
 
 1. `id`, `project` and `dataDate` must each be a safe segment
-   (`[A-Za-z0-9._-]{1,64}`) — they end up in an R2 object key.
+   (`[A-Za-z0-9._-]{1,64}`) — they end up in a KV key.
 2. `payload.sha256`, `payload.codec` and `provenance.generatedAt` must be present.
 3. The payload must be non-empty and ≤ 32 MB.
 4. **SHA-256 is recomputed over the bytes that actually arrived** and compared
@@ -149,7 +149,7 @@ Step 4 is the check the folder design could not make, because it had no server.
 
 Publishing is **idempotent on (project, dataDate, sha256)** — and on `id` — so
 a client retrying after an interrupted upload gets `{status: 'exists'}` rather
-than creating a duplicate. If the D1 insert fails after the R2 put, the object
+than creating a duplicate. If the D1 insert fails after the KV put, the value
 is deleted rather than left orphaned: metadata is the record of truth, and an
 object no row points at would be served to no one.
 
@@ -444,7 +444,7 @@ than re-argued.
 
 | Option | Shape | Verdict |
 |---|---|---|
-| **Cloudflare** (chosen) | Worker + D1 + R2, access keys | Built, tested, deploy-ready |
+| **Cloudflare** (chosen) | Worker + D1 + KV, access keys | Built, tested, deployed |
 | Direct Supabase | PostgREST + Storage + RLS, no server code | ~7–9 days; loses two properties below |
 | Hybrid Supabase | Direct reads, small Edge Function for uploads | ~4–5 days; keeps both properties |
 
@@ -478,6 +478,17 @@ a complete local copy and clearing `syncedAt` republishes everything.
 
 - **Depends on a third party.** Cloudflare outages stop synchronisation. Local
   history is unaffected, which is what bounds the damage.
+- **KV holds 1 GB free — roughly 1,200 graphs.** R2 would give 10 GB but requires
+  a payment method on file even inside its free allowance, which this deployment
+  deliberately avoids. The ceiling is manageable because every computer keeps a
+  complete local copy: the service only has to hold a recent window, so old keys
+  can be pruned without anyone losing history. Watch the namespace size and prune
+  before it fills.
+- **KV is eventually consistent.** D1 is not, so for up to ~60 seconds a freshly
+  published graph can be listed while its payload is still replicating.
+  `getPayload` says so explicitly and the client retries on the next open, but a
+  colleague opening a graph within a minute of publication may need one retry.
+  R2 would not have this property.
 - **Access keys are bearer tokens.** A leaked key works until revoked; there is
   no device binding beyond DPAPI-at-rest. `last_used_at` is the signal for
   spotting one.
@@ -522,7 +533,7 @@ regenerated bit-identically rather than stored. See `CODEC_SPEC.md`.
 | 3 | Background scheduling, retry, offline recovery | ✅ complete |
 | 4 | Role probe, Management read-only experience | ✅ complete |
 | 5 | Tests, docs, deployment guide | ✅ complete |
-| 6 | Online service (Worker + D1 + R2), access keys | ✅ complete |
+| 6 | Online service (Worker + D1 + KV), access keys | ✅ complete |
 | 7 | Lazy payloads, date browsing in Daily Evaluation | ✅ complete |
 
 ## Verification
@@ -535,7 +546,7 @@ npm run build   # production renderer bundle
 
 `npm test` needs no Cloudflare account, no Electron, no `wrangler` and no
 network. The Worker runs against `node:sqlite` executing the real migration and
-an in-memory R2, so the routing, auth, roles, validation and SQL under test are
+an in-memory KV, so the routing, auth, roles, validation and SQL under test are
 the code that will be deployed.
 
 | Suite | Checks | Covers |

@@ -6,13 +6,18 @@ compatibility_date = "2026-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "ess-graph-repository"
-database_id = "REPLACE_WITH_YOUR_D1_ID"   # wrangler d1 create ess-graph-repository
+database_id = "1899f8ce-ddd5-4f2f-b682-343345822733"
 
-# Payloads. R2 charges no egress, which matters because every client
-# repeatedly downloads graph data.
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "ess-graph-payloads"        # wrangler r2 bucket create ess-graph-payloads
+# Payloads. Workers KV rather than R2: R2 requires a payment method on file even
+# inside its free allowance, and this deployment must stay card-free.
+#
+# The trade is 1 GB instead of 10 GB — roughly 1,200 graphs. That is not a
+# ceiling in practice, because every computer keeps a complete local copy of the
+# history; the service only has to hold a recent window, and old keys can be
+# pruned without anyone losing anything.
+[[kv_namespaces]]
+binding = "PAYLOADS"
+id = "a621608cb861487cbe656127bfdb4521"   # wrangler kv namespace create GRAPHS
 
 [observability]
 enabled = true

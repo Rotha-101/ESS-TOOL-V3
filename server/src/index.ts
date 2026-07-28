@@ -32,15 +32,15 @@ async function route(request: Request, env: Env): Promise<Response> {
   // Liveness, unauthenticated: lets an admin distinguish "service down" from
   // "my key is wrong" without holding a valid key.
   if (path === '/v1/health') {
-    const checks = { db: false, bucket: false };
+    const checks = { db: false, storage: false };
     try {
       await env.DB.prepare('SELECT 1').first();
       checks.db = true;
     } catch { /* reported below */ }
     try {
-      await env.BUCKET.head('___healthcheck___');
-      checks.bucket = true;
-    } catch { /* head on a missing key still proves reachability */ }
+      await env.PAYLOADS.get('___healthcheck___');
+      checks.storage = true;
+    } catch { /* a miss on an absent key still proves reachability */ }
     return json({ status: checks.db ? 'ok' : 'degraded', schemaVersion: SCHEMA_VERSION, ...checks });
   }
 

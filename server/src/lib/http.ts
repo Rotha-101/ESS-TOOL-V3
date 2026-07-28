@@ -3,7 +3,8 @@
 
 export interface Env {
   DB: D1Database;
-  BUCKET: R2Bucket;
+  /** Gzipped essg-v1 series blocks, keyed by project/date/id. */
+  PAYLOADS: KVNamespace;
 }
 
 export const json = (data: unknown, status = 200, headers: HeadersInit = {}): Response =>

@@ -25,15 +25,17 @@ with two storage bindings. Setup is roughly fifteen minutes, once.
 
 ```text
    Desktop app (many)  ──HTTPS──▶  Cloudflare Worker  ──▶  D1    metadata
-                                                       └──▶  R2    graph payloads
+                                                       └──▶  KV    graph payloads
 ```
 
 Everything lives in `server/`. It deploys independently of the desktop app;
 they share only the `/v1` API contract.
 
 **Sizing:** ~0.84 MB per graph. At one graph per project per day across ten
-projects that is ~8 MB/day, ~3 GB/year — comfortably inside R2's free tier for
-the first few years, and D1 stores only metadata.
+projects that is ~8 MB/day, ~3 GB/year. Workers KV is free without a payment
+method but holds 1 GB — about 1,200 graphs. That is not a hard ceiling: every
+computer keeps a complete local copy, so the service only needs a recent window
+and old keys can be pruned. See Maintenance.
 
 **Prerequisites:** a Cloudflare account, Node.js, and `wrangler` (installed by
 `npm install` inside `server/`).
@@ -54,18 +56,26 @@ wrangler login
 
 ```bash
 wrangler d1 create ess-graph-repository
-wrangler r2 bucket create ess-graph-payloads
+wrangler kv namespace create GRAPHS
 ```
 
-`d1 create` prints a `database_id`. Put it in `wrangler.toml`, replacing
-`REPLACE_WITH_YOUR_D1_ID`:
+Both commands print an id. Put each into `wrangler.toml`:
 
 ```toml
 [[d1_databases]]
 binding = "DB"
 database_name = "ess-graph-repository"
-database_id = "the-uuid-just-printed"
+database_id = "the-uuid-d1-create-printed"
+
+[[kv_namespaces]]
+binding = "PAYLOADS"
+id = "the-id-kv-namespace-create-printed"
 ```
+
+**Workers KV rather than R2 is deliberate.** R2 gives 10 GB against KV's 1 GB,
+but requires a payment method on file even inside its free allowance. KV needs
+none. The smaller ceiling is manageable because clients keep the full history
+locally — see Maintenance for pruning.
 
 ### 2.2 Create the tables
 
@@ -90,7 +100,7 @@ prefer one.
 
 ```bash
 curl https://ess-graph-repository.<your-subdomain>.workers.dev/v1/health
-# {"status":"ok","schemaVersion":1,"db":true,"bucket":true}
+# {"status":"ok","schemaVersion":1,"db":true,"storage":true}
 ```
 
 `/v1/health` is the only unauthenticated route. It exists so an admin can tell
@@ -210,7 +220,7 @@ uploaded or retained anywhere — only their file *names*, as provenance.
 | Where | What | Size |
 |---|---|---|
 | D1 `graphs` | project, data date, engineer, timestamps, full graph configuration (title, labels, legend, axis ranges, line styles, pins), cycle/SOC summary | ~1.9 KB |
-| R2 `graphs/<project>/<dataDate>/<id>.essg.gz` | the compressed series | ~0.84 MB |
+| KV `graphs/<project>/<dataDate>/<id>.essg.gz` | the compressed series | ~0.84 MB |
 | D1 `access_keys` | name, email, role, SHA-256 of the key, timestamps | tiny |
 
 Together the metadata and payload redraw the graph exactly as the engineer saw
@@ -220,7 +230,7 @@ it.
 for every graph in the company, and downloads the ~0.84 MB series block only
 when somebody opens that graph — then keeps it. So a new machine joining a
 repository with two years of history transfers a few megabytes, not gigabytes,
-and R2 egress stays proportional to what people actually look at. In the
+and KV reads stay proportional to what people actually look at. In the
 Repository tab a disk icon means stored locally, a cloud icon means it will
 download on open.
 
@@ -235,8 +245,8 @@ later by whoever opens it.
 
 - **D1** — `wrangler d1 export ess-graph-repository --remote --output backup.sql`.
   Small, fast, and worth putting on a schedule.
-- **R2** — records are immutable, so any incremental copy only ever transfers
-  new objects. `rclone` or the S3-compatible API both work.
+- **KV** — records are immutable, so any incremental copy only ever transfers
+  new keys. `wrangler kv key list` plus `wrangler kv key get` will walk them.
 - **Every engineer's machine also keeps a local copy of everything it has
   synced**, so the service is not a single point of data loss.
 
@@ -264,7 +274,7 @@ Cloudflare.
 |---|---|---|
 | 1 | Engineer A generates a graph | Appears in A's Graph Repository within seconds, with A's name |
 | 2 | Saved locally first | Repository shows it with a **disk** icon; it opens with the network cable pulled |
-| 3 | Synchronised to the cloud | Status bar reads *Synced*; `GET /v1/graphs/ids` lists the id; the R2 object exists |
+| 3 | Synchronised to the cloud | Status bar reads *Synced*; `GET /v1/graphs/ids` lists the id; the KV key exists |
 | 4 | Engineer B syncs | Graph appears in B's list — with a **cloud** icon, since B has not opened it |
 | 5 | B opens it | Downloads, then renders identically to A's; icon turns to **disk** |
 | 6 | Management opens it | Sees the same graph, **VIEW ONLY** badge in the header, no import or delete controls |
@@ -306,7 +316,7 @@ synced.
 | *n waiting to publish* stays stuck | Key revoked, or role changed to viewer | Run Test Connection; check the key is still active |
 | Graph missing on another machine | Not yet synced | Sync runs every 5 min, on window focus, on regaining connectivity, and on demand. Click **Sync Now** |
 | *Payload checksum does not match the metadata* | Upload was truncated in transit | The record is rejected, not stored. It retries on the next pass |
-| *checksum mismatch — the download may be incomplete* when opening a graph | Download was truncated | Nothing is cached; open it again. Persistent failures mean the R2 object is damaged — re-publish from the originating machine |
+| *checksum mismatch — the download may be incomplete* when opening a graph | Download was truncated | Nothing is cached; open it again. Persistent failures mean the stored value is damaged — re-publish from the originating machine |
 | Graph is listed but will not open offline | Its data has never been downloaded on this computer | Expected. Open it once while connected and it stays available offline. The cloud icon in the Repository tab marks these |
 | *Graph repository sync is only available in the desktop application* | Running the dev server in a browser | Expected — network I/O lives in the Electron main process |
 | `/v1/health` reports `"db": false` | Migration never ran, or the binding is wrong | `npm run migrate`; check `database_id` in `wrangler.toml` |
@@ -320,14 +330,14 @@ is convenience, and the role check on `POST /v1/graphs` is the enforcement.
 
 ## 9. Maintenance
 
-**Adding a project** — nothing to do. R2 keys are created on first publish.
+**Adding a project** — nothing to do. KV keys are created on first publish.
 
 **Adding a person** — issue a key (§3.2). No group membership, no directory.
 
 **Someone leaves** — revoke their key. Their published graphs stay, correctly
 attributed.
 
-**Archiving old records** — delete the R2 objects and the matching D1 rows for a
+**Archiving old records** — delete the KV keys and the matching D1 rows for a
 year. Clients tolerate records disappearing. Given the size, there is rarely a
 reason.
 
@@ -356,5 +366,5 @@ npm run build    # production renderer bundle
 
 `npm test` needs no Cloudflare account, no Electron, no `wrangler` and no
 network. The Worker under test runs against `node:sqlite` executing the real
-migration and an in-memory R2, so the routing, auth, roles, validation and SQL
+migration and an in-memory KV, so the routing, auth, roles, validation and SQL
 being exercised are the code that will be deployed.
