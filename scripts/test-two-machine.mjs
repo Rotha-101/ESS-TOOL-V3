@@ -22,6 +22,7 @@ const SERVER = path.join(ROOT, 'server');
 const FAKE_DB = path.join(HERE, 'fixtures', 'fake-db.mjs');
 const require = createRequire(import.meta.url);
 const esbuild = require(path.join(ROOT, 'node_modules/esbuild'));
+const APP_VERSION = require(path.join(ROOT, 'package.json')).version;
 
 const N = 86400;
 
@@ -48,7 +49,10 @@ const bundle = esbuild.buildSync({
   bundle: true, format: 'esm', write: false, platform: 'neutral',
   mainFields: ['module', 'main'], absWorkingDir: ROOT,
   alias: { '@/lib/db': FAKE_DB, '@': path.join(ROOT, 'src') },
-  define: { __APP_VERSION__: '"1.2.0"' },
+  // Read from package.json, the same source vite.config.ts uses, so this
+  // asserts the real stamping path instead of a literal that silently goes
+  // stale at every release.
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
 }).outputFiles[0].text;
 
 /** A distinct module instance per machine => independent local storage. */
@@ -268,7 +272,7 @@ const PINS = [{ id: 'p1', graphId: 'pf_plant1_soc', x: '08:15:00', y: 42.5, yref
     bRec.meta.view.activeMetric === 'pf_p1' && bRec.meta.view.selectedPlant === 'plant1');
   check('cycle numbers preserved', bEval.dailyCycle.plant1 === 1.234 && bEval.totalCycle.plant2 === 409.9);
   check('SOC markers preserved', bEval.socStats.plant1.maxSoc === 51.7);
-  check('app version stamped', bRec.meta.provenance.appVersion === '1.2.0');
+  check(`app version stamped (${APP_VERSION})`, bRec.meta.provenance.appVersion === APP_VERSION);
   check('timestamps rebuilt for the 27th',
     bEval.timestamps.length === N && bEval.timestamps[0].getDate() === 27 && bEval.timestamps[0].getHours() === 0);
 

@@ -1,10 +1,16 @@
 # Shared Graph Repository — Architecture
 
-Status: **in production design**. Phases 0–6 complete.
+Status: **complete and frozen at 1.3.0**. Phases 0–7 done. Further change should
+be bug fixes or separately requested features.
 
 Version 1.2.0 replaced the original Windows shared folder with an
 internet-reachable service. The section [From folder to
 service](#from-folder-to-service) records why, and what did *not* change.
+
+Version 1.3.0 — the first build of the online service to ship — made payloads
+lazy and added date browsing to the Daily Evaluation tab. See [Lazy
+payloads](#lazy-payloads) and [Browsing history by
+date](#browsing-history-by-date).
 
 ---
 

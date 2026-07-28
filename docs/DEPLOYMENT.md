@@ -5,8 +5,15 @@ and troubleshooting.
 
 **Applies to version 1.2.0 and later.** 1.2.0 replaced the Windows shared
 folder with an online service. Builds 1.1.x sync only to a shared folder and
-ignore these settings entirely; 1.0.x has no Graph Repository at all. Installer:
-`Data Visualization Tool Setup 1.2.0.exe`.
+ignore these settings entirely; 1.0.x has no Graph Repository at all.
+
+**Current release: 1.3.0** — installer
+`Data Visualization Tool Setup 1.3.0.exe`. 1.3.0 added date browsing in the
+Daily Evaluation tab and made payloads lazy: clients sync metadata and download
+a graph's data only when someone opens it. The API is unchanged, so 1.2.0 and
+1.3.0 machines interoperate — a 1.2.0 client simply downloads more eagerly.
+1.2.0 was never distributed; 1.3.0 is the first build of the online service to
+ship.
 
 Audience: whoever deploys the service and distributes the `.exe`. There is no
 server to patch and no VM to keep running — the service is a Cloudflare Worker
@@ -171,7 +178,7 @@ publishes, overriding whatever the client sent, so use their real name.
 
 Same installer, same `.exe`, for everyone.
 
-1. Install the application (`Data Visualization Tool Setup 1.2.0.exe` or later).
+1. Install the application (`Data Visualization Tool Setup 1.3.0.exe` or later).
 2. Open **Settings → Graph Repository**.
 3. Enter the **Server URL** from step 2.3.
 4. Paste the **Access Key** you were issued and click **Save Key**.
@@ -302,7 +309,9 @@ reason.
 
 **Upgrading the application** — decoders read every codec version ever shipped,
 so mixed versions across the fleet are safe. Upgrade at your own pace. Machines
-still on 1.1.x or older simply do not talk to the service.
+still on 1.1.x or older simply do not talk to the service. A 1.2.0 machine
+alongside 1.3.0 is fine too: same API, it just downloads graph data eagerly
+instead of on demand.
 
 **Upgrading the service** — `npm run deploy`. Records are immutable and the API
 is versioned under `/v1`, so a deploy is not a migration. Add new routes rather
