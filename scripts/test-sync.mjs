@@ -73,13 +73,13 @@ function makeTransport({ reachable = true, writable = true, remote = [], corrupt
     kind: 'fake', puts, store,
     async probe() { return { reachable, writable, error: reachable ? null : 'Server unavailable.' }; },
     async listRecordIds() {
-      if (throwOnList) throw new Error('SMB read failed');
+      if (throwOnList) throw new Error('listing failed');
       return [...store.entries()].map(([fileId, r]) => ({ id: fileId, project: r.meta.project, dataDate: r.meta.dataDate, year: '2026' }));
     },
     async fetchMeta(ref) { return store.get(ref.id).meta; },
     async fetchPayload(ref) {
       const rec = store.get(ref.id);
-      // Simulate a truncated SMB read.
+      // Simulate a truncated download.
       return corruptIds.includes(ref.id) ? rec.payload.slice(0, 5) : rec.payload;
     },
     async putRecord(meta, payload) { puts.push(meta.id); store.set(meta.id, { meta, payload }); return { status: 'written', id: meta.id }; },
@@ -169,7 +169,7 @@ fake.seedLocal(stuck.meta, stuck.payload, undefined);
 const t6 = makeTransport({ throwOnList: true });
 r = await runSync(t6);
 check('pass completes', Boolean(r.finishedAt));
-check('listing error recorded', r.failures.some(f => /SMB read failed/.test(f)), JSON.stringify(r.failures));
+check('listing error recorded', r.failures.some(f => /listing failed/.test(f)), JSON.stringify(r.failures));
 check('upload still attempted despite pull failure', r.uploaded === 1, `uploaded=${r.uploaded}`);
 
 console.log('\n=== 7. maxDownloads caps a pass; the next pass continues ===');

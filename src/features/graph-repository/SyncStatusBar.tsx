@@ -96,7 +96,7 @@ export function SyncStatusBar({ state, onSync }: { state: SyncState; onSync: () 
             onClick={() => setIsSettingsOpen(true)}
             className="h-6 px-2 rounded bg-accent-blue hover:bg-blue-600 text-white font-bold flex items-center gap-1"
           >
-            <Settings2 size={10} /> CONFIGURE SHARED FOLDER
+            <Settings2 size={10} /> CONFIGURE REPOSITORY
           </button>
         )}
       </div>

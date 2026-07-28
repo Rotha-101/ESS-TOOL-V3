@@ -9,8 +9,8 @@ Implementation: `src/lib/graph-codec/`. Guarded by `scripts/test-codec.mjs`.
 
 One `EvalData` holds 15 signals × 3 plants × 86,400 samples ≈ 3.9 M numbers.
 `JSON.stringify` produces 30–100 MB, which is why `storageInspector.ts` refuses
-to stringify one just to measure it. Copying that to a shared folder once a day
-per project is not viable; 0.84 MB is.
+to stringify one just to measure it. Uploading that once a day per project, to
+every machine that syncs, is not viable; 0.84 MB is.
 
 Measured on real SNTL600 telemetry (3 plants, 2026-06-02, 2.94 M samples):
 
