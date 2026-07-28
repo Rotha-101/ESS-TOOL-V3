@@ -78,11 +78,10 @@ self.onmessage = async (event) => {
   
   if (type === 'PARSE_FILES') {
     try {
-      if (!(self as any).XLSX) {
-        importScripts('https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js');
-      }
-      const XLSX = (self as any).XLSX;
-      
+      // XLSX is the bundled import at the top of this file. It used to be
+      // fetched with importScripts from cdn.sheetjs.com, and the local const
+      // shadowed the import — so spreadsheet parsing in the worker silently
+      // required internet even after the main thread was fixed.
       const filtered = files.filter((f: any) => /\.xlsx?$/i.test(f.name) && !f.name.startsWith('~$'));
       if (filtered.length === 0) {
         throw new Error('No valid spreadsheets loaded.');

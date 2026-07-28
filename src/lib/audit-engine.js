@@ -118,10 +118,15 @@ function _ensureUnrar() {
     const resp = await fetch('https://cdn.jsdelivr.net/npm/node-unrar-js@2.0.2/esm/js/unrar.wasm');
     if (!resp.ok) throw new Error('unrar.wasm fetch failed: HTTP ' + resp.status);
     return { createExtractorFromData, wasmBinary: await resp.arrayBuffer() };
-  })().catch((err) => {
+  })().catch(() => {
     // Let a later attempt retry rather than caching the failure forever.
     _unrarPromise = null;
-    throw err;
+    // ZIP and plain folders work offline; only RAR needs this reader, and it
+    // is the one input format that still requires a connection. Say so plainly
+    // instead of surfacing a fetch error.
+    throw new Error(
+      'Opening .rar files needs an internet connection. Use a ZIP file or a plain folder to work offline.',
+    );
   });
   return _unrarPromise;
 }
@@ -160,9 +165,11 @@ function _ensureLibarchive() {
     const blob = new Blob([await resp.text()], { type: 'application/javascript' });
     Archive.init({ workerUrl: URL.createObjectURL(blob) });
     return Archive;
-  })().catch((err) => {
+  })().catch(() => {
     _libarchivePromise = null;
-    throw err;
+    throw new Error(
+      'Opening .7z files needs an internet connection. Use a ZIP file or a plain folder to work offline.',
+    );
   });
   return _libarchivePromise;
 }

@@ -46,6 +46,8 @@
     --color-surface: var(--surface);
     --color-border-v: var(--border-v);
     --color-accent-blue: var(--accent-blue);
+    --color-foreground-muted: var(--foreground-muted);
+    --color-foreground-subtle: var(--foreground-subtle);
     
     /* ── Spacing — derives from density ───────────────────────────────── */
     --spacing: var(--d-space);
@@ -160,17 +162,24 @@
     --secondary-foreground: #111827;
     --muted: rgba(0, 0, 0, 0.05);
     --muted-foreground: rgba(0, 0, 0, 0.5);
-    --accent: #00A3FF;
+    --accent: #0277BD;
     --accent-foreground: #FFFFFF;
-    --destructive: #EF4444;
+    --destructive: #B91C1C;
     --border: rgba(0, 0, 0, 0.1);
     --input: rgba(0, 0, 0, 0.1);
-    --ring: #00A3FF;
+    --ring: #0277BD;
     
     --panel: #F9FAFB;
     --surface: #FFFFFF;
     --border-v: rgba(0, 0, 0, 0.1);
-    --accent-blue: #00A3FF;
+    /* #00A3FF measures 2.62:1 on --panel, well under the 4.5 AA threshold for
+       body text. #0277BD is 4.59:1. Dark theme keeps #00A3FF (6.62:1). */
+    --accent-blue: #0277BD;
+
+    /* Muted text with measured AA contrast. The foreground/45 and /50 opacity
+       utilities used throughout measure 3.36-4.28:1 and fail; prefer these. */
+    --foreground-muted: rgba(17, 24, 39, 0.70);
+    --foreground-subtle: rgba(17, 24, 39, 0.60);
     
     --chart-1: #00A3FF;
     --chart-2: #22C55E;
@@ -235,7 +244,11 @@
     --status-busy: #38BDF8;
     --status-warn: #FBBF24;
     --status-danger: #F87171;
-    --status-idle: rgba(255, 255, 255, 0.45);
+    --status-idle: rgba(255, 255, 255, 0.55);
+
+    /* Measured AA on --panel #14161B: /50 is 4.28:1 and fails; /60 is 5.59:1. */
+    --foreground-muted: rgba(224, 224, 224, 0.65);
+    --foreground-subtle: rgba(224, 224, 224, 0.60);
 
     --sidebar: #14161B;
     --sidebar-foreground: #E0E0E0;
