@@ -278,6 +278,71 @@ Attribution cannot be spoofed by editing local settings.
 
 ---
 
+## 16. The store owns the active project
+
+**Decision.** `useAppStore` is the single writer. `audit-engine` keeps a mirror,
+pushed via `syncActiveProject()`, and is wired through `connectProjectStore()` —
+the same injection pattern as `connectServerConfig`, so it stays free of a React
+or store import.
+
+**What was wrong.** Not two competing live values, which would have been easier
+to spot. `audit-engine` owned the project and persisted it to its own
+`hcActiveProject` localStorage key, while the store held a **second persisted
+field of the same name that nothing read and nothing wrote**. Dormant state
+representing a live domain concept — the kind that survives for months and
+surfaces the moment someone adds a feature and reaches for the obvious-looking
+store field.
+
+**Why the mirror rather than rewriting the reads.** ~20 internal read sites
+inside 2,250 lines of untyped legacy JS. Inverting ownership is the safe change;
+rewriting those reads is not.
+
+**Migration.** The old localStorage key is adopted once at startup if the store
+has no value, then removed.
+
+**Do not** add another writer. If a new caller needs to change the project, it
+goes through `useAppStore().setHcActiveProject`.
+
+---
+
+## 17. Constraints that must survive into the Operations Platform
+
+Recorded here because both are easy to get wrong in a UI, and getting them wrong
+would mislead an administrator about live systems.
+
+**`last_used_at` is activity history, not presence.** The write is throttled to
+one hour (`server/src/lib/auth.ts`), so it cannot distinguish "app open and
+idle" from "closed 55 minutes ago". Render it as a date — *"Last seen 12 Jul"* —
+never a green dot, never "online". Real presence needs a heartbeat table and a
+write on the hot request path, which was deliberately not built.
+
+**Storage per user is bytes first introduced, not bytes pushed.** Publishing is
+deduplicated on `(project, dataDate, sha256)`, so re-publishing an identical
+graph credits the *first* uploader and the second is credited nothing. A column
+labelled "storage used" without that caveat will be read as "how much this
+person costs us", which is not what it measures.
+
+**Total storage is an estimate.** KV usage is not readable from inside a Worker;
+`SUM(payload_bytes)` from D1 is the only in-app figure and excludes per-key
+overhead and anything pruned out of band.
+
+---
+
+## Technical debt register
+
+Known, deliberate, and scheduled — not forgotten.
+
+| Item | Why it stands | Remove when |
+|---|---|---|
+| `hcRenderProjectTabs` and the pre-React DOM renderers in `audit-engine.js` | Guarded and unreachable; several callers inside untyped legacy code | audit-engine modernisation |
+| `App.tsx` 430-line body ternary, 180-line inline Report Export | Works; extracting it is a large diff with no user-visible gain | Report Export gets its own feature module |
+| `audit-engine.js` — 2,250 lines, untyped | Owns validation, projects and archive handling; the highest-risk file to touch | Incremental, behind tests |
+| Opacity-based muted text in analysis modules | Fails AA (3.36–4.28:1); shell uses `--foreground-muted` | Analysis screens get a visual pass |
+| No UI component tests | Every bug this stage was found by looking, not testing | Before the shell grows further |
+| `setHcActiveProject` export on `audit-engine` | Deprecated shim routing to the store | All callers use the store directly |
+
+---
+
 ## Contributing
 
 Adding an entry: state the decision, why it was made, what it rules out, and

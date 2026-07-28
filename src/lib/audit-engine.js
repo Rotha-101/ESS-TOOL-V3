@@ -1015,14 +1015,18 @@ function hcInitProjects() {
 }
 
 function hcRenderProjectTabs() {
-  // Pre-React DOM UI. #hc-project-tabs does not exist in the application, so
-  // this returns before the click handler below — which assigns hcActiveProject
-  // directly — can ever be attached. That assignment would be a second writer
-  // for a value the store now owns.
+  // @legacy DEAD — pre-React DOM UI. Scheduled for removal with the
+  // audit-engine modernisation; do not build on it.
   //
-  // Guarded rather than deleted: the surrounding renderer is legacy code with
-  // several callers, and an early return is the smaller, safer change. Without
-  // it this also threw on `wrap.innerHTML` whenever it was reached.
+  // #hc-project-tabs does not exist in the application, so this returns before
+  // the click handler below — which assigns hcActiveProject directly — can ever
+  // be attached. That assignment would be a second writer for a value the store
+  // now owns (see docs/ARCHITECTURE_DECISIONS.md §16).
+  //
+  // Guarded rather than deleted: this renderer has several callers inside a
+  // 2,250-line untyped module, and until every path is audited, disabling
+  // execution is safer than removing code something may still reach. Without
+  // the guard it also threw on `wrap.innerHTML` whenever it was reached.
   const wrap = $('hc-project-tabs');
   if (!wrap) return;
   wrap.innerHTML = '';
