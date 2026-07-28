@@ -8,7 +8,7 @@ export const _state = { records: new Map(), index: [] };
 
 export const reset = () => { _state.records.clear(); _state.index = []; };
 
-export const seedLocal = (meta, payload, syncedAt) => {
+export const seedLocal = (meta, payload, syncedAt, origin = 'local') => {
   _state.records.set(meta.id, { meta, payload: payload ?? null });
   _state.index.push({
     id: meta.id, project: meta.project, dataDate: meta.dataDate,
@@ -17,8 +17,18 @@ export const seedLocal = (meta, payload, syncedAt) => {
     plantCount: 3, hasCycleData: true, hasNcc: false,
     payloadBytes: meta.payload.bytes, sha256: meta.payload.sha256, syncedAt,
     payloadCached: Boolean(payload),
+    origin,
   });
 };
+
+export async function listGraphHistory() {
+  return _state.index;
+}
+export const isLocallyGenerated = (e) =>
+  e.origin ? e.origin === 'local' : Boolean(e.signature);
+export async function clearSynced(id) {
+  _state.index = _state.index.map((e) => (e.id === id ? { ...e, syncedAt: undefined } : e));
+}
 
 export async function listKnownIds() {
   return new Set(_state.index.map((e) => e.id));
@@ -39,12 +49,12 @@ export async function loadGraphMeta(id) {
 }
 export async function importRemoteRecord(record) {
   if (_state.records.has(record.meta.id)) return null;
-  seedLocal(record.meta, record.payload, new Date().toISOString());
+  seedLocal(record.meta, record.payload, new Date().toISOString(), 'remote');
   return _state.index[_state.index.length - 1];
 }
 export async function importRemoteMeta(meta) {
   if (_state.records.has(meta.id)) return null;
-  seedLocal(meta, null, new Date().toISOString());
+  seedLocal(meta, null, new Date().toISOString(), 'remote');
   return _state.index[_state.index.length - 1];
 }
 export async function putPayload(id, payload) {

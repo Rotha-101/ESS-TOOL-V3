@@ -104,6 +104,8 @@ export function useBackgroundSync() {
         const parts: string[] = [];
         if (result.downloaded) parts.push(`${result.downloaded} received`);
         if (result.uploaded) parts.push(`${result.uploaded} published`);
+        // Worth saying out loud: it means an earlier pass had lost them.
+        if (result.reconciled) parts.push(`${result.reconciled} recovered`);
         if (result.failures.length) parts.push(`${result.failures.length} failed`);
 
         phase = result.failures.length ? 'error' : 'ok';

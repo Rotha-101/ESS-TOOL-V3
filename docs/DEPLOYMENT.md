@@ -7,13 +7,21 @@ and troubleshooting.
 folder with an online service. Builds 1.1.x sync only to a shared folder and
 ignore these settings entirely; 1.0.x has no Graph Repository at all.
 
-**Current release: 1.3.0** — installer
-`Data Visualization Tool Setup 1.3.0.exe`. 1.3.0 added date browsing in the
-Daily Evaluation tab and made payloads lazy: clients sync metadata and download
-a graph's data only when someone opens it. The API is unchanged, so 1.2.0 and
-1.3.0 machines interoperate — a 1.2.0 client simply downloads more eagerly.
-1.2.0 was never distributed; 1.3.0 is the first build of the online service to
-ship.
+**Current release: 1.3.1** — installer
+`Data Visualization Tool Setup 1.3.1.exe`.
+
+1.3.0 added date browsing in the Daily Evaluation tab and made payloads lazy:
+clients sync metadata and download a graph's data only when someone opens it.
+1.2.0 was never distributed. The API is unchanged across all three, so mixed
+machines interoperate.
+
+**Upgrade to 1.3.1 before running the pilot.** 1.3.0 had a defect that could
+mark a graph as published without uploading it — silently, permanently, and
+while reporting success. 1.3.1 stops that happening and, on the next sync,
+**repairs installations it already affected**: any locally generated graph the
+service has never seen is put back in the queue and republished automatically.
+No user action is required beyond installing the update. Storage is unchanged,
+so local history carries over.
 
 Audience: whoever deploys the service and distributes the `.exe`. There is no
 server to patch and no VM to keep running — the service is a Cloudflare Worker

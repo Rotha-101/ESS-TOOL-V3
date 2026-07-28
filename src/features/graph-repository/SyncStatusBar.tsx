@@ -55,7 +55,11 @@ export function SyncStatusBar({ state, onSync }: { state: SyncState; onSync: () 
         {badge.icon} {badge.label}
       </span>
 
-      {configured && state.phase !== 'idle' && (
+      {/* Only when the server actually answered. `writable` is forced false
+          while offline, so showing this on any non-idle phase told an engineer
+          they were "View only" the moment their network dropped — when in fact
+          they keep full access. Same `confirmed` rule decideReadOnly uses. */}
+      {configured && (state.phase === 'ok' || state.phase === 'error') && (
         <span
           className={cn(
             'flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold',

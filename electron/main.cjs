@@ -42,7 +42,38 @@ function createWindow() {
 
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=8192');
 
+// Storage isolation.
+//
+// Electron derives userData from package.json `name`, which is the same string
+// for a dev run (`electron .`) and for the installed build — so both used
+// %APPDATA%\ess-toolbox and fought over the same IndexedDB LOCK files. The
+// result was "Could not open the quota database", after which locally stored
+// graph payloads became unreadable.
+//
+// Only the DEV path moves. The installed app keeps the directory it already
+// uses, so no engineer loses local history to this fix.
+if (!app.isPackaged) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'ess-toolbox-dev'));
+}
+
+// One instance per install, for the same reason: two copies of the same app
+// share one userData directory and corrupt storage exactly as above. Double
+// clicking the shortcut twice is an easy thing for anyone to do, so the second
+// launch focuses the existing window instead of starting a rival process.
+const hasInstanceLock = app.requestSingleInstanceLock();
+if (!hasInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [existing] = BrowserWindow.getAllWindows();
+    if (!existing) return;
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+  });
+}
+
 app.whenReady().then(() => {
+  if (!hasInstanceLock) return;
   createWindow();
 
   app.on('activate', () => {

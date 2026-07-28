@@ -53,7 +53,21 @@ export interface GraphHistoryEntry {
    * hundreds of megabytes.
    */
   payloadCached?: boolean;
+  /**
+   * Where this record came from. Only locally generated graphs are ours to
+   * publish, so reconciliation must never try to re-upload something that was
+   * downloaded from the service.
+   *
+   * Older rows predate this field: `signature` is set only by
+   * `saveGraphRecord`, so it is a reliable stand-in for them.
+   */
+  origin?: 'local' | 'remote';
 }
+
+/** Was this record generated on this computer? Falls back to `signature` for
+ *  rows written before `origin` existed. */
+export const isLocallyGenerated = (e: GraphHistoryEntry): boolean =>
+  e.origin ? e.origin === 'local' : Boolean(e.signature);
 
 const toEntry = (meta: GraphRecordMeta): GraphHistoryEntry => ({
   id: meta.id,
@@ -167,7 +181,12 @@ export async function saveGraphRecord(
     await setDBItem(`${PAYLOAD_PREFIX}${meta.id}`, record.payload);
     await setDBItem(`${META_PREFIX}${meta.id}`, meta);
 
-    const entry: GraphHistoryEntry = { ...toEntry(meta), signature, payloadCached: true };
+    const entry: GraphHistoryEntry = {
+      ...toEntry(meta),
+      signature,
+      payloadCached: true,
+      origin: 'local',
+    };
     await writeIndex([...index, entry]);
     return { status: 'saved', entry };
   });
@@ -196,6 +215,7 @@ export async function importRemoteMeta(meta: GraphRecordMeta): Promise<GraphHist
       ...toEntry(meta),
       syncedAt: new Date().toISOString(),
       payloadCached: false,
+      origin: 'remote',
     };
     await writeIndex([...index, entry]);
     return entry;
@@ -245,6 +265,7 @@ export async function importRemoteRecord(record: GraphRecord): Promise<GraphHist
       ...toEntry(record.meta),
       syncedAt: new Date().toISOString(),
       payloadCached: true,
+      origin: 'remote',
     };
     await writeIndex([...index, entry]);
     return entry;
@@ -262,6 +283,23 @@ export async function markSynced(id: string, syncedAt = new Date().toISOString()
   return withIndexLock(async () => {
     const index = await readIndex();
     await writeIndex(index.map((e) => (e.id === id ? { ...e, syncedAt } : e)));
+  });
+}
+
+/**
+ * Put a record back in the outbox.
+ *
+ * Used by reconciliation when a graph claims to be published but the service
+ * has never heard of it — which is what a `markSynced` without a successful
+ * upload leaves behind. Clearing the stamp is the only way such a record can
+ * ever be published, because `listPendingUploads` keys entirely off `syncedAt`.
+ */
+export async function clearSynced(id: string): Promise<void> {
+  return withIndexLock(async () => {
+    const index = await readIndex();
+    await writeIndex(
+      index.map((e) => (e.id === id ? { ...e, syncedAt: undefined } : e)),
+    );
   });
 }
 

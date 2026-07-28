@@ -19,9 +19,13 @@
 // offline.
 
 import {
+  clearSynced,
   importRemoteMeta,
+  isLocallyGenerated,
+  listGraphHistory,
   listKnownIds,
   listPendingUploads,
+  loadGraphMeta,
   loadGraphRecord,
   markSynced,
   putPayload,
@@ -33,6 +37,10 @@ export interface SyncResult {
   status: TransportStatus;
   downloaded: number;
   uploaded: number;
+  /** Graphs that claimed to be published but were absent from the service, and
+   *  have been returned to the outbox. Non-zero means an earlier pass lost
+   *  something; the same pass republishes them. */
+  reconciled: number;
   /** Records that failed individually; the pass still counts as completed. */
   failures: string[];
   finishedAt: string;
@@ -42,6 +50,7 @@ const emptyResult = (status: TransportStatus): SyncResult => ({
   status,
   downloaded: 0,
   uploaded: 0,
+  reconciled: 0,
   failures: [],
   finishedAt: new Date().toISOString(),
 });
@@ -76,6 +85,9 @@ export async function runSync(
   const failures: string[] = [];
   let downloaded = 0;
   let uploaded = 0;
+  /** Records that claimed to be published but were not, and have been put back
+   *  in the outbox. Non-zero means an earlier pass lost something. */
+  let reconciled = 0;
 
   // ---- Pull -------------------------------------------------------------
   try {
@@ -96,6 +108,31 @@ export async function runSync(
       }
       await yieldToUi();
     }
+
+    // ---- Reconcile ------------------------------------------------------
+    // A record can claim to be published while the service has never heard of
+    // it — that is what a `markSynced` without a successful upload leaves
+    // behind, and such a record is invisible to the outbox forever after.
+    //
+    // The listing we just fetched is the complete server-side id set, so it
+    // settles the question directly. Anything of ours that is missing from it
+    // goes back in the outbox and republishes on the push below, in this same
+    // pass. This is what repairs an installation that was already damaged.
+    //
+    // Deliberately inside the `try`: it must run only on a listing that
+    // actually succeeded, or an offline pass would un-sync the entire history.
+    const serverIds = new Set(refs.map((r) => r.id));
+    for (const entry of await listGraphHistory()) {
+      // Only graphs made here are ours to publish. A downloaded record is
+      // metadata-only and would fail forever if queued.
+      if (!isLocallyGenerated(entry)) continue;
+      if (!entry.syncedAt) continue;              // already pending
+      if (entry.payloadCached === false) continue; // nothing local to send
+      if (serverIds.has(entry.id)) continue;       // genuinely published
+
+      await clearSynced(entry.id);
+      reconciled++;
+    }
   } catch (err: any) {
     failures.push(`Could not read the repository: ${err?.message ?? String(err)}`);
   }
@@ -112,8 +149,29 @@ export async function runSync(
         try {
           const record = await loadGraphRecord(entry.id);
           if (!record) {
-            // Index row without a stored record — nothing to publish.
-            await markSynced(entry.id);
+            // Two very different situations reach here, and conflating them
+            // used to lose graphs silently: the record was marked synced
+            // without ever being uploaded, so it could never be retried and
+            // nothing told anyone.
+            const meta = await loadGraphMeta(entry.id);
+            if (!meta) {
+              // Nothing is stored under this id at all — an index row pointing
+              // at a record that does not exist. There is genuinely nothing to
+              // publish, so retiring it from the queue is correct; but say so
+              // rather than swallowing it.
+              await markSynced(entry.id);
+              failures.push(
+                `${entry.project} ${entry.dataDate}: no stored graph data — removed from the publish queue.`,
+              );
+              continue;
+            }
+            // Metadata survives but the payload does not. This is local
+            // corruption, and it is recoverable in principle, so the record
+            // stays pending and keeps reporting until someone deals with it.
+            // Marking it synced here is exactly the bug this replaces.
+            failures.push(
+              `${entry.project} ${entry.dataDate}: graph data is missing on this computer and cannot be published.`,
+            );
             continue;
           }
           await transport.putRecord(record.meta, record.payload);
@@ -130,7 +188,7 @@ export async function runSync(
   }
 
   onProgress?.('');
-  return { status, downloaded, uploaded, failures, finishedAt: new Date().toISOString() };
+  return { status, downloaded, uploaded, reconciled, failures, finishedAt: new Date().toISOString() };
 }
 
 /** Fetch one record's METADATA and verify it before it enters local history.

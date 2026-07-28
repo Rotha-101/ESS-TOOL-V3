@@ -148,6 +148,81 @@ check('no upload attempted', r.uploaded === 0 && t4.puts.length === 0);
 check('record stays pending locally', (await fake.listPendingUploads()).length === 1);
 check('no spurious failures', r.failures.length === 0, JSON.stringify(r.failures));
 
+console.log('\n=== 4b. A pending graph whose payload is missing must NOT be marked synced ===');
+// Regression guard. This used to mark the record synced without uploading it:
+// the graph then existed locally, claimed to be published, was never retried,
+// and no failure was ever shown. Observed in production — local history said
+// "1 graph, Synced, up to date" while the server held nothing.
+fake.reset();
+const orphan = await makeRecord('payload-lost');
+fake.seedLocal(orphan.meta, null, undefined);   // metadata only, still pending
+const t4b = makeTransport({ writable: true });
+r = await runSync(t4b);
+check('nothing uploaded', r.uploaded === 0 && t4b.puts.length === 0, JSON.stringify(t4b.puts));
+check('STAYS pending — not silently retired', (await fake.listPendingUploads()).length === 1);
+check('failure is reported to the user', r.failures.length === 1, JSON.stringify(r.failures));
+check('reason names the missing data', /missing on this computer/i.test(r.failures[0] || ''), r.failures[0]);
+// And it must keep reporting rather than quietly disappearing on a later pass.
+r = await runSync(t4b);
+check('still pending on the next pass', (await fake.listPendingUploads()).length === 1);
+check('still reported on the next pass', r.failures.length === 1, JSON.stringify(r.failures));
+
+console.log('\n=== 4c. An index row with no record at all IS retired, but reported ===');
+fake.reset();
+// Index entry pointing at something that was never stored — genuinely nothing
+// to publish, so retiring it is right; staying pending would fail forever.
+fake._state.index.push({
+  id: 'ghost-1', project: 'SNTL600', dataDate: '2026-06-02', revision: 1,
+  generatedAt: new Date().toISOString(), engineerName: 'Eng', activeMetric: 'pf_p1',
+  plantCount: 3, hasCycleData: false, hasNcc: false, payloadBytes: 0, sha256: 'x',
+});
+const t4c = makeTransport({ writable: true });
+r = await runSync(t4c);
+check('nothing uploaded', r.uploaded === 0);
+check('retired from the queue', (await fake.listPendingUploads()).length === 0);
+check('but still reported, not swallowed', r.failures.length === 1, JSON.stringify(r.failures));
+check('reason distinguishes it', /no stored graph data/i.test(r.failures[0] || ''), r.failures[0]);
+
+console.log('\n=== 4d. A graph that claims to be synced but is NOT on the server is repaired ===');
+// This is the live production symptom: local history said "1 graph, Synced, up
+// to date" while the service held nothing, because an earlier pass called
+// markSynced without uploading. Such a record is invisible to the outbox, so
+// the fix for 4b cannot rescue it — reconciliation against the server's id set
+// is what puts it back.
+fake.reset();
+const stranded = await makeRecord('stranded-1');
+fake.seedLocal(stranded.meta, stranded.payload, '2026-07-27T10:00:00.000Z'); // claims synced
+const t4d = makeTransport({ writable: true });                                // server has nothing
+check('starts out NOT pending (the damaged state)', (await fake.listPendingUploads()).length === 0);
+r = await runSync(t4d);
+check('detected as never published', r.reconciled === 1, `reconciled=${r.reconciled}`);
+check('and republished in the SAME pass', r.uploaded === 1, `uploaded=${r.uploaded}`);
+check('the server now has it', t4d.puts.includes('stranded-1'));
+check('no longer pending afterwards', (await fake.listPendingUploads()).length === 0);
+r = await runSync(t4d);
+check('second pass is quiet — no repeat upload', r.uploaded === 0 && r.reconciled === 0);
+
+console.log('\n=== 4e. Reconciliation must not fire on the wrong records ===');
+fake.reset();
+// A downloaded, metadata-only record is not ours to publish. Re-queueing it
+// would fail forever on every viewer machine.
+const fromServer = await makeRecord('remote-1');
+await fake.importRemoteMeta(fromServer.meta);
+const t4e = makeTransport({ writable: true });
+r = await runSync(t4e);
+check('remote-origin record is left alone', r.reconciled === 0, `reconciled=${r.reconciled}`);
+check('and never uploaded', t4e.puts.length === 0, JSON.stringify(t4e.puts));
+
+// A listing failure must never un-sync anything — otherwise one offline pass
+// would re-queue the entire history.
+fake.reset();
+const healthy = await makeRecord('healthy-1');
+fake.seedLocal(healthy.meta, healthy.payload, '2026-07-27T10:00:00.000Z');
+const t4f = makeTransport({ writable: true, throwOnList: true });
+r = await runSync(t4f);
+check('listing failure does not reconcile', r.reconciled === 0, `reconciled=${r.reconciled}`);
+check('record stays synced', (await fake.listPendingUploads()).length === 0);
+
 console.log('\n=== 5. Corrupt/truncated payload is rejected AT OPEN time ===');
 // Checksum verification moved with the payload fetch: sync no longer downloads
 // series blocks, so a truncated transfer can only be detected when one is

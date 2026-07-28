@@ -604,7 +604,7 @@ export default function App() {
           {readOnly && (
             <span
               className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded bg-blue-500/15 text-blue-300 border border-blue-400/30"
-              title="The shared graph folder grants your Windows account read access only. Viewing and exporting are available; importing and publishing are not."
+              title="Your account has read-only access to the company repository. Viewing and exporting are available; importing and publishing are not."
             >
               <Eye size={11} /> VIEW ONLY
             </span>
