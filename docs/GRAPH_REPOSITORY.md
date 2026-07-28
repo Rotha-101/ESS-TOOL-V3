@@ -436,6 +436,44 @@ role model no longer depends on Active Directory.
 
 ---
 
+## Backends considered
+
+Supabase was evaluated against the deployed design before the 1.3.0 pilot.
+**Cloudflare was kept.** Recorded here so the question is answered once rather
+than re-argued.
+
+| Option | Shape | Verdict |
+|---|---|---|
+| **Cloudflare** (chosen) | Worker + D1 + R2, access keys | Built, tested, deploy-ready |
+| Direct Supabase | PostgREST + Storage + RLS, no server code | ~7–9 days; loses two properties below |
+| Hybrid Supabase | Direct reads, small Edge Function for uploads | ~4–5 days; keeps both properties |
+
+Why we stayed:
+
+- **Offline fit.** Nothing in the sync layer would have improved — local-first,
+  the pending queue and lazy payloads are client-side and identical under any
+  backend.
+- **Permanent keys suit long offline periods.** An access key never expires, so a
+  machine offline for months reconnects and publishes. Supabase refresh tokens
+  rotate and expire, meaning re-authentication before pending work could drain.
+- **The implementation is finished.** 200 checks, 97 of which run the real server
+  in-process with no account, no Docker and no network — a harness Direct
+  Supabase leaves nothing to run.
+- **No migration or deployment risk before the pilot**, which exists to validate
+  the application, not an unproven backend.
+
+Direct Supabase would also have cost **server-side checksum verification**
+(Storage will not check a client-declared SHA-256) and moved **identity
+overwrite** from ~10 tested lines to RLS policies and triggers.
+
+Revisit if any of these become real: advanced SQL reporting, a business
+dashboard, analytics or external-system integration, or multi-site / enterprise
+expansion. Postgres earns its place once something other than this application
+needs to query the data — and migration stays cheap, because every machine holds
+a complete local copy and clearing `syncedAt` republishes everything.
+
+---
+
 ## Accepted limitations
 
 - **Depends on a third party.** Cloudflare outages stop synchronisation. Local
