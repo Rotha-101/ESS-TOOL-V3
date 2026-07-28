@@ -248,13 +248,37 @@ no consistency window to coordinate.
 
 ## 7. Rollout
 
-1. **Pilot** — two engineers and one manager for a week. Confirm graphs
-   generated on one machine appear on the others, and that the manager sees
-   *View only*.
-2. **Verify roles** — have the manager confirm no import controls are visible
-   and the header shows the **VIEW ONLY** badge.
-3. **Fleet** — distribute the installer, the service URL, and one key per
+1. **Pilot** — two engineers and one manager for a week, against the
+   acceptance checklist below.
+2. **Fleet** — distribute the installer, the service URL, and one key per
    person.
+
+### Production acceptance checklist
+
+Run this once, on three real machines, before declaring the release production
+ready. `npm test` already proves each step against the real Worker; this
+confirms the same behaviour through the installed `.exe`, real network and real
+Cloudflare.
+
+| # | Step | Pass condition |
+|---|---|---|
+| 1 | Engineer A generates a graph | Appears in A's Graph Repository within seconds, with A's name |
+| 2 | Saved locally first | Repository shows it with a **disk** icon; it opens with the network cable pulled |
+| 3 | Synchronised to the cloud | Status bar reads *Synced*; `GET /v1/graphs/ids` lists the id; the R2 object exists |
+| 4 | Engineer B syncs | Graph appears in B's list — with a **cloud** icon, since B has not opened it |
+| 5 | B opens it | Downloads, then renders identically to A's; icon turns to **disk** |
+| 6 | Management opens it | Sees the same graph, **VIEW ONLY** badge in the header, no import or delete controls |
+| 7 | Management cannot publish | Generating on the manager's machine leaves the graph local and pending; it never reaches the service |
+| 8 | Offline generation | With the network off, A generates a graph — it saves, opens and exports normally; status reads *Offline* |
+| 9 | Automatic reconnect | Restore the network. Without clicking anything, the pending graph publishes within ~15 min (immediately on window focus) and reaches B |
+
+Steps 8 and 9 are the ones worth being fussy about: they are the difference
+between a sync feature and a dependency. Pull the cable rather than
+disconnecting Wi-Fi in software, so the machine genuinely loses the route.
+
+Attribution is worth one explicit look during step 1. The name on a published
+graph comes from the access key, not from Settings — so if it reads wrong, the
+key was issued under the wrong name (§3.2) and should be reissued.
 
 Existing installations lose nothing: graphs already in local history publish
 automatically on first successful connection.
