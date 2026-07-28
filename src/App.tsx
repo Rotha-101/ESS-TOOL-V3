@@ -1,5 +1,15 @@
-import Plot from 'react-plotly.js';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+// react-plotly.js pulls all of Plotly (~4 MB) into whatever chunk imports it.
+// App renders exactly one chart — the dashboard donut — so importing it here
+// put the entire charting library in the startup path for every user, whether
+// or not they ever opened the dashboard.
+const Plot = lazy(() => import('react-plotly.js'));
+// Also charts, and only shown on four screens — so it must not pin Plotly to
+// the startup path either.
+const PlantBreakdownCards = lazy(() =>
+  import('./components/PlantBreakdownCards').then((m) => ({ default: m.PlantBreakdownCards })),
+);
 
 import type { Config } from 'plotly.js';
 import {
@@ -34,10 +44,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { AIAgent } from './components/AIAgent';
-import { SmartReport } from './components/SmartReport';
 import { HeaderClock } from './components/HeaderClock';
-import { WorkbookPreview, type WorkbookPreviewSource } from './components/WorkbookPreview';
+import type { WorkbookPreviewSource } from './components/WorkbookPreview';
 import { useAIContext } from './lib/ai-context';
 import { useAppStore } from './store/useAppStore';
 import {
@@ -56,25 +64,72 @@ import {
 import { exportAllGraphsToZip } from './lib/exportGraphs';
 import { generatePortableViewHtml } from './lib/portable-view-template';
 import { getDynamicKpis } from './lib/kpi-utils';
-import { PlantBreakdownCards } from './components/PlantBreakdownCards';
 import { NavItem } from './components/NavItem';
 import { KpiCard } from './components/KpiCard';
-import { ValidationDebug } from './components/ValidationDebug';
-import { CycleCalculation } from './components/CycleCalculation';
-import { DailyEvaluationGraph } from './features/daily-evaluation';
-import { GraphRepository, useBackgroundSync, useIsReadOnly } from './features/graph-repository';
-import { UsableCapacity } from './features/usable-capacity';
-import { TelegramNcc } from './features/telegram-ncc';
-import { DatabaseTab } from './features/database';
+import { useBackgroundSync, useIsReadOnly } from './features/graph-repository';
 import { SettingsWindow } from './components/SettingsWindow';
 import { GlobalProgressModal } from './components/GlobalProgressModal';
 import { useAppearance } from './hooks/useAppearance';
 import { AppHeader } from './components/shell/AppHeader';
 import { AppSidebar } from './components/shell/AppSidebar';
-import { resolveInitialTab } from './config/navigation';
+import { PRELOAD_AFTER, resolveInitialTab } from './config/navigation';
 import { HomeWorkspace } from './features/home';
 
-export { DailyEvaluationGraph } from './features/daily-evaluation';
+
+
+// ── Lazy modules ────────────────────────────────────────────────────────────
+// Each of these is a screen the user may never open in a session. Loading all
+// of them before the first paint meant everyone paid for Plotly, the AI SDK and
+// every analysis module just to see Home.
+//
+// Chunks are fetched on first navigation and cached by the browser thereafter.
+// preloadModule() below warms the likely next one during idle time, so the
+// common paths feel instant without costing anything at startup.
+const AIAgent = lazy(() => import('./components/AIAgent').then((m) => ({ default: m.AIAgent })));
+const SmartReport = lazy(() => import('./components/SmartReport').then((m) => ({ default: m.SmartReport })));
+const WorkbookPreview = lazy(() => import('./components/WorkbookPreview').then((m) => ({ default: m.WorkbookPreview })));
+const ValidationDebug = lazy(() => import('./components/ValidationDebug').then((m) => ({ default: m.ValidationDebug })));
+const CycleCalculation = lazy(() => import('./components/CycleCalculation').then((m) => ({ default: m.CycleCalculation })));
+const DailyEvaluationGraph = lazy(() => import('./features/daily-evaluation').then((m) => ({ default: m.DailyEvaluationGraph })));
+const GraphRepository = lazy(() => import('./features/graph-repository').then((m) => ({ default: m.GraphRepository })));
+const UsableCapacity = lazy(() => import('./features/usable-capacity').then((m) => ({ default: m.UsableCapacity })));
+const TelegramNcc = lazy(() => import('./features/telegram-ncc').then((m) => ({ default: m.TelegramNcc })));
+const DatabaseTab = lazy(() => import('./features/database').then((m) => ({ default: m.DatabaseTab })));
+
+/** Loaders keyed by tab id, so preloading is the same code path as rendering. */
+const MODULE_LOADERS: Record<string, () => Promise<unknown>> = {
+  ai: () => import('./components/AIAgent'),
+  smart_report: () => import('./components/SmartReport'),
+  signal: () => import('./components/ValidationDebug'),
+  power: () => import('./components/CycleCalculation'),
+  soc: () => import('./features/daily-evaluation'),
+  graph_repository: () => import('./features/graph-repository'),
+  usable_capacity: () => import('./features/usable-capacity'),
+  telegram_ncc: () => import('./features/telegram-ncc'),
+  database: () => import('./features/database'),
+};
+
+const preloaded = new Set<string>();
+
+/** Warm a chunk during idle time. Never competes with the module the user is
+ *  actually waiting for, and never runs twice for the same id. */
+function preloadModule(id: string): void {
+  if (preloaded.has(id) || !MODULE_LOADERS[id]) return;
+  preloaded.add(id);
+  const run = () => { void MODULE_LOADERS[id]().catch(() => preloaded.delete(id)); };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2000 });
+  else setTimeout(run, 300);
+}
+
+/** Shown while a screen's chunk arrives. Deliberately plain — a spinner that
+ *  flashes for 80ms is worse than nothing. */
+function ModuleFallback() {
+  return (
+    <div className="flex-1 flex items-center justify-center" role="status" aria-label="Loading">
+      <div className="size-5 rounded-full border-2 border-accent-blue/30 border-t-accent-blue animate-spin" />
+    </div>
+  );
+}
 
 export default function App() {
   const {
@@ -180,6 +235,12 @@ export default function App() {
     setActivePreview(null);
     setActiveTab(tab);
   };
+
+  // Warm the screens people usually go to next, during idle time. Costs
+  // nothing at startup and makes the common paths feel instant.
+  useEffect(() => {
+    for (const next of PRELOAD_AFTER[activeTab] ?? []) preloadModule(next);
+  }, [activeTab]);
 
   const openWorkbookPreview = (source: WorkbookPreviewSource) => {
     setActiveTab('dashboard');
@@ -608,10 +669,14 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           readOnly={readOnly}
           role={syncRole}
+          onIntent={preloadModule}
         />
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
+        {/* module-surface opts the analysis screens out of shell density, so a
+            display-size preference can never move a tuned Plotly container. */}
+        <main className="flex-1 flex flex-col p-4 gap-4 overflow-hidden module-surface">
+          <Suspense fallback={<ModuleFallback />}>
           {activePreview ? (
             <WorkbookPreview
               source={activePreview}
@@ -1182,6 +1247,7 @@ export default function App() {
           )}
 
 
+          </Suspense>
         </main>
       </div>
 

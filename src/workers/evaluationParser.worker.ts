@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import * as XLSX from 'xlsx';
 import { parseCycleExcelFile, buildPlantCycleTableJs } from '../lib/cycle-utils';
 const _MON: Record<string, number> = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
 function _validDate(y: number, mo: number, d: number) { return y >= 2000 && y <= 2100 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31; }

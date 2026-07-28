@@ -1,7 +1,5 @@
+import * as XLSX from 'xlsx';
 import type { EvalData } from '@/types/eval-data';
-
-const XLSX = (window as any).XLSX;
-
 // Export processed data as a real Excel file matching MATLAB logs
 // (Message + Realtime_Dispatch sheets). Moved verbatim from
 // DailyEvaluationGraph.tsx; self-contained including its error alert.

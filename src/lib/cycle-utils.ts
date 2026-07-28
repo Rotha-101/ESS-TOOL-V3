@@ -1,4 +1,4 @@
-const XLSX = (window as any).XLSX;
+import * as XLSX from 'xlsx';
 export interface ESSRow {
   PlantName: string;
   DeviceName: string;

@@ -1,12 +1,10 @@
+import * as XLSX from 'xlsx';
 import { getDBItem } from '@/lib/db';
 import { parseCycleExcelFile, buildPlantCycleTableJs } from '@/lib/cycle-utils';
 import { extractDataDate } from '@/lib/date-helpers';
 import { interpolateArray, forwardFillArray } from '../utils/interpolation';
 import { parseFlexDate } from '../utils/parsing';
 import type { EvalData } from '@/types/eval-data';
-
-const XLSX = (window as any).XLSX;
-
 export interface EvalFileEntry { file: File; path: string; plantId?: string }
 
 export interface ParseProgressCallbacks {

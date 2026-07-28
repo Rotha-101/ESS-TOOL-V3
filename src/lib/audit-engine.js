@@ -3,8 +3,11 @@
 import { isBessProject } from './project-detection';
 import { extractDataDate } from './date-helpers';
 
-const XLSX = typeof window !== 'undefined' ? window.XLSX : null;
-const fflate = typeof window !== 'undefined' ? window.fflate : null;
+// Bundled, not fetched from a CDN. These used to come off `window`, which
+// meant spreadsheet import and ZIP extraction silently depended on the
+// internet in an application that promises to work without it.
+import * as XLSX from 'xlsx';
+import * as fflate from 'fflate';
 
 // ---------- Constants ----------
 const TYPE = {
@@ -98,28 +101,34 @@ async function decodeZipBytes(buf) {
 }
 
 // --- RAR via node-unrar-js (WASM, RAR5 capable) ---
-let _unrarWasmPromise = null;
+// Loaded the first time someone opens a .rar, not on every launch. It used to
+// be a <script type="module"> in index.html, so every user paid for a WASM
+// archive reader whether or not they ever touched one.
+let _unrarPromise = null;
 function _ensureUnrar() {
-  if (_unrarWasmPromise) return _unrarWasmPromise;
-  _unrarWasmPromise = (async () => {
-    if (!window.__UnrarCreate) {
-      await new Promise((resolve, reject) => {
-        const t = setTimeout(() => reject(new Error('node-unrar-js load timed out')), 15000);
-        window.addEventListener('unrar-loaded', () => { clearTimeout(t); resolve(); }, { once: true });
-        if (window.__UnrarCreate) { clearTimeout(t); resolve(); }
-      });
+  if (_unrarPromise) return _unrarPromise;
+  _unrarPromise = (async () => {
+    const mod = await import(
+      /* @vite-ignore */ 'https://esm.sh/node-unrar-js@2.0.2'
+    );
+    const createExtractorFromData = mod.createExtractorFromData || mod.default?.createExtractorFromData;
+    if (typeof createExtractorFromData !== 'function') {
+      throw new Error('Could not load the RAR reader.');
     }
-    const wasmUrl = 'https://cdn.jsdelivr.net/npm/node-unrar-js@2.0.2/esm/js/unrar.wasm';
-    const resp = await fetch(wasmUrl);
+    const resp = await fetch('https://cdn.jsdelivr.net/npm/node-unrar-js@2.0.2/esm/js/unrar.wasm');
     if (!resp.ok) throw new Error('unrar.wasm fetch failed: HTTP ' + resp.status);
-    return await resp.arrayBuffer();
-  })();
-  return _unrarWasmPromise;
+    return { createExtractorFromData, wasmBinary: await resp.arrayBuffer() };
+  })().catch((err) => {
+    // Let a later attempt retry rather than caching the failure forever.
+    _unrarPromise = null;
+    throw err;
+  });
+  return _unrarPromise;
 }
 async function decodeRarBytes(buf) {
-  const wasmBinary = await _ensureUnrar();
+  const { createExtractorFromData, wasmBinary } = await _ensureUnrar();
   const data = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  const extractor = await window.__UnrarCreate({ wasmBinary, data });
+  const extractor = await createExtractorFromData({ wasmBinary, data });
   const extracted = extractor.extract();
   const out = [];
   for (const f of extracted.files) {
@@ -133,31 +142,34 @@ async function decodeRarBytes(buf) {
 }
 
 // --- 7z (and other libarchive-supported formats) via libarchive.js ---
-let _libarchiveInitPromise = null;
+// Same treatment as the RAR reader: loaded when a .7z is actually opened.
+let _libarchivePromise = null;
 function _ensureLibarchive() {
-  if (_libarchiveInitPromise) return _libarchiveInitPromise;
-  _libarchiveInitPromise = (async () => {
-    if (!window.__LibArchive) {
-      await new Promise((resolve, reject) => {
-        const t = setTimeout(() => reject(new Error('libarchive.js load timed out')), 15000);
-        window.addEventListener('libarchive-loaded', () => { clearTimeout(t); resolve(); }, { once: true });
-        if (window.__LibArchive) { clearTimeout(t); resolve(); }
-      });
-    }
-    // CDN cross-origin Workers fail in many setups → fetch and run from a same-origin Blob URL
-    const workerSrc = 'https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/worker-bundle.js';
-    const resp = await fetch(workerSrc);
+  if (_libarchivePromise) return _libarchivePromise;
+  _libarchivePromise = (async () => {
+    const mod = await import(
+      /* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/libarchive.js'
+    );
+    const Archive = mod.Archive || mod.default?.Archive;
+    if (!Archive) throw new Error('Could not load the archive reader.');
+
+    // A cross-origin Worker fails in many setups, so the worker bundle is
+    // fetched and run from a same-origin Blob URL.
+    const resp = await fetch('https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/worker-bundle.js');
     if (!resp.ok) throw new Error('worker-bundle.js fetch failed: HTTP ' + resp.status);
-    const code = await resp.text();
-    const blob = new Blob([code], { type: 'application/javascript' });
-    window.__LibArchive.init({ workerUrl: URL.createObjectURL(blob) });
-  })();
-  return _libarchiveInitPromise;
+    const blob = new Blob([await resp.text()], { type: 'application/javascript' });
+    Archive.init({ workerUrl: URL.createObjectURL(blob) });
+    return Archive;
+  })().catch((err) => {
+    _libarchivePromise = null;
+    throw err;
+  });
+  return _libarchivePromise;
 }
 async function decode7zBytes(buf, fileName) {
-  await _ensureLibarchive();
+  const Archive = await _ensureLibarchive();
   const file = new File([buf], fileName || 'archive.7z');
-  let Archive = window.__LibArchive; if (!Archive) { const mod = await import('https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/libarchive.js'); Archive = mod.Archive; window.__LibArchive = Archive; } const archive = await Archive.open(file);
+  const archive = await Archive.open(file);
   const tree = await archive.extractFiles();
   const out = [];
   async function walk(node, prefix) {

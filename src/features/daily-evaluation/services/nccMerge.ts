@@ -1,11 +1,9 @@
+import * as XLSX from 'xlsx';
 import type { EvalData } from '@/types/eval-data';
 import type { EmsRecord } from '@/features/telegram-ncc/types';
 import { getProjectPlants } from '@/lib/project-utils';
 import { forwardFillArray } from '../utils/interpolation';
 import { parseFlexDate } from '../utils/parsing';
-
-const XLSX = (window as any).XLSX;
-
 type PlantKey = 'plant1' | 'plant2' | 'plant3';
 const ALL_PLANTS: PlantKey[] = ['plant1', 'plant2', 'plant3'];
 

@@ -24,6 +24,27 @@ export default defineConfig(({ mode }) => {
       ),
       global: 'window',
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // Plotly is imported by several lazily-loaded screens. Because they
+          // all share it, Rollup hoists it into their common ancestor — the
+          // entry chunk — which put ~4 MB of charting library back into the
+          // startup path even after every screen was made lazy.
+          //
+          // Naming it explicitly forces its own chunk, fetched the first time
+          // a chart is actually rendered. Same reasoning for the spreadsheet
+          // reader, which only the import and export paths need.
+          manualChunks(id: string) {
+            if (id.includes('node_modules/plotly.js') || id.includes('node_modules/react-plotly.js')) {
+              return 'plotly';
+            }
+            if (id.includes('node_modules/xlsx')) return 'xlsx';
+            return undefined;
+          },
+        },
+      },
+    },
     resolve: {
       alias: [
         { find: '@', replacement: path.resolve(__dirname, './src') },

@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import Plot from 'react-plotly.js';
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -11,9 +12,6 @@ import { expandZip, extractDataDate, hcByProject } from '../lib/audit-engine.js'
 import { is20PercentProject } from '../lib/project-detection';
 import { PlantDetailTable } from './PlantDetailTable';
 import { getProjectPlants } from '../lib/project-utils';
-
-const XLSX = (window as any).XLSX;
-
 export function CycleCalculation({ project, theme }: { project: string, theme: 'dark' | 'light' }) {
   const [dailyResults, setDailyResults] = useState<DailyResult[]>([]);
   const [selectedDayIdx, setSelectedDayIdx] = useState<number>(0);
